@@ -160,7 +160,9 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
 #' @param covariates Stage specific covariate name(s). Character vector or named list of character vectors.
 #' \itemize{
 #'   \item{} A vector is valid for single stage wide data or long data.
-#'   \item{} A named list is valid for multiple stage wide data. Each element must be a character vector with length K.
+#'   \item{} A named list is valid for multiple stages wide data. Each element
+#'   must be a character vector with length K. Each vector can contain NA
+#'   elements, if a covariate is not available for the given stage(s).
 #' }
 #' @param utility  Utility/Reward variable name(s). Character string or vector.
 #' \itemize{
@@ -371,6 +373,7 @@ melt_wide_data <- function(wide_data,
       stop(mes)
     }
   }
+
   # action:
   if (is.list(action))
     action <- unlist(action)
@@ -380,6 +383,7 @@ melt_wide_data <- function(wide_data,
   K <- length(action)
   # getting the action set:
   action_set <- sort(unique(unlist(wide_data[ , action, with = FALSE])))
+
   # covariates:
   if (!(is.list(covariates) | is.vector(covariates)))
     stop("'covariates' must be a character vector or a list of character vectors.")
@@ -400,6 +404,7 @@ melt_wide_data <- function(wide_data,
     else
       stop("'covariates' must be a named list in case of multiple actions.")
   }
+
   # baseline:
   if (!is.null(baseline)){
     baseline <- unlist(baseline)
@@ -440,8 +445,9 @@ melt_wide_data <- function(wide_data,
     }
   }
 
-  ### checking if 'data' contains all variable names:
+  ### checking if 'data' contains all non-NA variable names:
   tmp <- unlist(c(id, action, covariates, baseline, utility, deterministic_rewards))
+  tmp <- tmp[!is.na(tmp)]
   if (!all(tmp %in% names(wide_data))){
     mes <- tmp[!(tmp %in% names(wide_data))]
     mes <- paste(mes, collapse = "\", \"")
@@ -450,8 +456,9 @@ melt_wide_data <- function(wide_data,
   }
   rm(tmp)
 
-  ### checking for duplicates
+  ### checking for non-NA duplicates:
   tmp <- unlist(c(id, action, covariates, baseline, utility, deterministic_rewards))
+  tmp <- tmp[!is.na(tmp)]
   if (anyDuplicated(tmp)>0){
     mes <- tmp[anyDuplicated(tmp)]
     mes <- paste(mes, collapse = "\", \"")
@@ -466,7 +473,7 @@ melt_wide_data <- function(wide_data,
   }
 
   ### setting default variables if missing:
-  # setting id if missing
+  # setting id if missing:
   if (is.null(id)){
     if (any("id" %in% colnames(wide_data))){
       stop("'data' has a variable id, but 'id' = NULL. Please set 'id' = \"id\" or change the name of the id variable.")
@@ -475,13 +482,32 @@ melt_wide_data <- function(wide_data,
     wide_data[, id := 1:.N]
     id <- "id"
   }
-  # setting the rewards to 0 in case the final utility is provided.
+
+  # setting the rewards to 0 in case the final utility is provided:
   if (length(utility)==1) {
     for (i in seq(K)) {
       u <- paste0("_", utility[i], "_", i)
       stopifnot(!any(u %in% names(wide_data)))
       wide_data[, (u) := 0]
       utility <- c(u, utility)
+    }
+  }
+
+  # augmenting wide_data to handle NA covariates entries:
+  for (l in seq_along(covariates)){
+    na_idx <- is.na(covariates[[l]])
+    if (any(na_idx)){
+      if (all(na_idx)){
+        mes <- names(covariates[l])
+        mes <- paste("covariate", mes, 'is invalid.')
+        stop(mes)
+      }
+      # augmenting wide_data with NA column (of the same class):
+      NA_col_name <- paste("_NA_", l, sep = "")
+      wide_data[, c(NA_col_name) := wide_data[[covariates[[l]][!na_idx][[1]]]]]
+      wide_data[, c(NA_col_name) := NA]
+      # updating the covariate names:
+      covariates[[l]][na_idx] <- NA_col_name
     }
   }
 
@@ -494,12 +520,13 @@ melt_wide_data <- function(wide_data,
   }
   # selecting subset:
   sel <- unlist(c(id, action, covariates, utility, deterministic_rewards))
+  sel <- sel[!is.na(sel)]
   stage_data <- subset(wide_data, select = sel)
   # converts to long data:
   stage_data <- melt(stage_data, id.vars = id, measure.vars = measure, variable.name = "stage")
   setnames(stage_data, id, "id")
 
-  stage_data[ , stage := as.numeric(as.character(stage))]
+  stage_data[ , stage := as.integer(as.character(stage))]
   stage_data[ , A := as.character(A)]
   # setting the event variable:
   stage_data[!is.na(A), event := 0]

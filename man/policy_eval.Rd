@@ -24,7 +24,8 @@ policy_eval(
   q_full_history = FALSE,
   type = "dr",
   M = 1,
-  future_args = list(future.seed = TRUE)
+  future_args = list(future.seed = TRUE),
+  name = NULL
 )
 
 \method{coef}{policy_eval}(object, ...)
@@ -79,6 +80,8 @@ If a single model is provided, the model is reused at every stage.}
 \item{M}{Number of folds for cross-fitting.}
 
 \item{future_args}{Arguments passed to \code{\link[future.apply:future_apply]{future.apply::future_apply()}}.}
+
+\item{name}{Character string.}
 
 \item{object, x, y}{Objects of class "policy_eval".}
 
@@ -170,8 +173,6 @@ Z^d_1 = Q^d_1(H_1 , d_1(...)) + \sum_{r = 1}^K \prod_{j = 1}^{r}
 \frac{I\{A_j = d_j(...)\}}{g_{j}(H_j, A_j)}
 \{Q_{r+1}^d(H_{r+1} , d_{r+1}(...)) - Q_{r}^d(H_r , d_r(...))\}.
 }
-
-For references, see \doi{10.1515/jci-2013-0022}, \doi{10.1201/9780429192692}.
 }
 \section{S3 generics}{
 
@@ -195,14 +196,15 @@ d1 <- sim_single_stage(5e2, seed=1)
 pd1 <- policy_data(d1, action="A", covariates=list("Z", "B", "L"), utility="U")
 pd1
 
-# defining a static policy:
-pl1 <- policy_def(static_policy(1))
+# defining a static policy (A=1):
+pl1 <- policy_def(1)
 
 # evaluating the policy:
 pe1 <- policy_eval(policy_data = pd1,
                    policy = pl1,
                    g_models = g_glm(),
-                   q_models = q_glm())
+                   q_models = q_glm(),
+                   name = "A=1 (glm)")
 
 # summarizing the estimated value of the policy:
 # (equivalent to summary(pe1)):
@@ -220,9 +222,10 @@ head(IC(pe1))
 # evaluating the policy using random forest nuisance models:
 set.seed(1)
 pe1_rf <- policy_eval(policy_data = pd1,
-                   policy = pl1,
-                   g_models = g_rf(),
-                   q_models = q_rf())
+                      policy = pl1,
+                      g_models = g_rf(),
+                      q_models = q_rf(),
+                      name = "A=1 (rf)")
 
 # merging the two estimates (equivalent to pe1 + pe1_rf):
 (est1 <- merge(pe1, pe1_rf))
@@ -233,17 +236,18 @@ head(IC(est1))
 source(system.file("sim", "two_stage.R", package="polle"))
 d2 <- sim_two_stage(5e2, seed=1)
 pd2 <- policy_data(d2,
-                  action = c("A_1", "A_2"),
-                  covariates = list(L = c("L_1", "L_2"),
-                                    C = c("C_1", "C_2")),
-                  utility = c("U_1", "U_2", "U_3"))
+                   action = c("A_1", "A_2"),
+                   covariates = list(L = c("L_1", "L_2"),
+                                     C = c("C_1", "C_2")),
+                   utility = c("U_1", "U_2", "U_3"))
 pd2
 
 # defining a policy learner based on cross-fitted doubly robust Q-learning:
 pl2 <- policy_learn(type = "rqvl",
-                   qv_models = list(q_glm(~C_1), q_glm(~C_1+C_2)),
-                   full_history = TRUE,
-                   L = 2) # number of folds for cross-fitting
+                    control = control_rqvl(qv_models = list(q_glm(~C_1),
+                                                            q_glm(~C_1+C_2))),
+                    full_history = TRUE,
+                    L = 2) # number of folds for cross-fitting
 
 # evaluating the policy learner using 2-fold cross fitting:
 pe2 <- policy_eval(type = "dr",
@@ -251,12 +255,21 @@ pe2 <- policy_eval(type = "dr",
                    policy_learn = pl2,
                    q_models = q_glm(),
                    g_models = g_glm(),
-                   M = 2) # number of folds for cross-fitting
+                   M = 2, # number of folds for cross-fitting
+                   name = "rqvl")
 # summarizing the estimated value of the policy:
 pe2
 
 # getting the cross-fitted policy actions:
 head(get_policy_actions(pe2))
+}
+\references{
+van der Laan, Mark J., and Alexander R. Luedtke. "Targeted learning of the
+mean outcome under an optimal dynamic treatment rule." Journal of causal
+inference 3.1 (2015): 61-95. \doi{10.1515/jci-2013-0022}\cr
+\cr
+Tsiatis, Anastasios A., et al. Dynamic treatment regimes: Statistical methods
+for precision medicine. Chapman and Hall/CRC, 2019. \doi{10.1201/9780429192692}.
 }
 \seealso{
 \link[lava:IC]{lava::IC}, \link[lava:estimate.default]{lava::estimate.default}.

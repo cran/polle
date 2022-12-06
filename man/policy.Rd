@@ -40,7 +40,7 @@ pd <- policy_data(d,
 
 # defining a dynamic policy:
 p <- policy_def(
-  dynamic_policy(function(L) (L > 0) * 1),
+  function(L) (L>0)*1,
   reuse = TRUE
 )
 p
@@ -49,7 +49,7 @@ head(p(pd), 5)
 # V-restricted (Doubly Robust) Q-learning:
 # specifying the learner:
 pl <- policy_learn(type = "rqvl",
-                   qv_models = q_glm(formula = ~ C))
+                   control = control_rqvl(qv_models = q_glm(formula = ~ C)))
 
 # fitting the policy (object):
 po <- pl(policy_data = pd,
@@ -60,5 +60,4 @@ p <- get_policy(po)
 p
 
 head(p(pd))
-
 }

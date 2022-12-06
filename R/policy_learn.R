@@ -1,39 +1,61 @@
 #' Create Policy Learner
 #'
 #' \code{policy_learn()} is used to specify a policy learning method (Q-learning,
-#' V-restricted (doubly robust) Q-learning and V-restricted policy tree
-#' learning). Evaluating the policy learner returns a policy object.
+#' V-restricted (doubly robust) Q-learning, V-restricted policy tree
+#' learning and outcome weighted learning). Evaluating the policy learner returns a policy object.
 #' @param type Type of policy learner method:
 #' \itemize{
 #'   \item{} \code{"rql"}: Realistic Quality/Q-learning.
 #'   \item{} \code{"rqvl"}: Realistic V-restricted (doubly robust) Q-learning.
 #'   \item{} \code{"ptl"}: Policy Tree Learning.
+#'   \item{} \code{"owl"}: Outcome Weighted Learning.
+#'   \item{} \code{"earl"}: Efficient Augmentation and Relaxation Learning (only single stage).
+#'   \item{} \code{"rwl"}: Residual Weighted Learning (only single stage).
+#' }
+#' @param control List of control arguments. Values (and default values) are set using
+#' \code{control_{type}()}. Key arguments include:\cr
+#' [control_rqvl()]:\cr
+#' \itemize{
+#'   \item{} \code{qv_models}: Single element or list of V-restricted Q-models created
+#'           by [q_glm()], [q_rf()], [q_sl()] or similar functions.
+#' }
+#' [control_ptl()]: \cr
+#' \itemize{
+#'   \item{} \code{policy_vars}: Character vector/string or list of character
+#' vectors/strings. Variable names used to construct the V-restricted policy tree.
+#' The names must be a subset of the history names, see get_history_names().
+#'   \item{} \code{hybrid}: If \code{TRUE}, [policytree::hybrid_policy_tree()] is used to
+#' fit a policy tree.
+#'   \item{} \code{depth}: Integer or integer vector. The depth of the fitted policy
+#' tree for each stage.
+#' }
+#' [control_owl()]: \cr
+#' \itemize{
+#'   \item{} \code{policy_vars}: As in \code{control_ptl()}.
+#'   \item{} \code{loss}: Loss function. The options are \code{"hinge"}, \code{"ramp"},
+#' \code{"logit"}, \code{"logit.lasso"}, \code{"l2"}, \code{"l2.lasso"}.
+#'   \item{} \code{kernel}: Type of kernel used by the support vector machine. The
+#' options are \code{"linear"}, \code{"rbf"}.
+#'    \item{} \code{augment}:  If \code{TRUE} the outcomes are augmented.
+#' }
+#' [control_earl()]/[control_rwl()]: \cr
+#' \itemize{
+#'   \item{} \code{moPropen}: Propensity model of class "ModelObj", see [modelObj::modelObj].
+#'   \item{} \code{moMain}: Main effects outcome model of class "ModelObj".
+#'   \item{} \code{moCont} Contrast outcome model of class "ModelObj".
+#'   \item{} \code{regime}: An object of class [formula] specifying the design of the policy.
+#'   \item{} \code{surrogate}: The surrogate 0-1 loss function. The options are
+#' \code{"logit"}, \code{"exp"}, \code{"hinge"}, \code{"sqhinge"}, \code{"huber"}.
+#'   \item{} \code{kernel}: The options are \code{"linear"}, \code{"poly"}, \code{"radial"}.
 #' }
 #' @param alpha Probability threshold for determining realistic actions.
-#' @param L (only used if \code{type = "rqvl"} or \code{type = "ptl"}) Number of folds for
-#' cross-fitting.
+#' @param L Number of folds for cross-fitting nuisance models.
 #' @param save_cross_fit_models If \code{TRUE}, the cross-fitted models will be saved.
 #' @param future_args Arguments passed to [future.apply::future_apply()].
-#' @param qv_models (only used if \code{type = "rqvl"}) V-restricted Q-models created
-#' by [q_glm()], [q_rf()], [q_sl()] or similar functions.
 #' @param full_history If \code{TRUE}, the full
-#' history is used to fit each QV-model/policy tree. If FALSE, the single stage/
-#' "Markov type" history is used to fit each QV-model/policy tree.
-#' @param policy_vars (only used if \code{type = "ptl"}) Character vector/string or
-#' list of character vectors/strings. Variable names used to construct a
-#' V-restricted policy tree. The names must be a subset of the history variable
-#' names, see [get_history_names()].
-#' @param depth (only used if \code{type = "ptl"}) Numeric or numeric vector.
-#' The depth of the fitted policy tree for each stage, see [policy_tree()].
-#' @param split.step (only used if \code{type = "ptl"}) Numeric or numeric vector.
-#' The number of possible splits to consider when performing policy tree search
-#' at each stage, see [policy_tree()].
-#' @param min.node.size (only used if \code{type = "ptl"}) Numeric or numeric vector.
-#' The smallest terminal node size permitted at each stage, see [policy_tree()].
-#' @param hybrid (only used if \code{type = "ptl"}) If \code{TRUE}, [hybrid_policy_tree()] is
-#' used to fit a policy tree.
-#' @param search.depth (only used if \code{type = "ptl"} and \code{hybrid = TRUE})
-#' Numeric or numeric vector. Depth to look ahead when splitting at each stage.
+#' history is used to fit each policy function (e.g. QV-model, policy tree). If FALSE, the single stage/
+#' "Markov type" history is used to fit each policy function.
+#' @param name Character string.
 #' @param x Object of class "policy_object" or "policy_learn".
 #' @param ... Additional arguments passed to print.
 #' @returns Function of inherited class \code{"policy_learn"}.
@@ -63,9 +85,19 @@
 #'                                 a given stage.}
 #' \item{[get_policy_actions()]}{ Extract the (fitted) policy actions.}
 #' }
-#' @details
-#' For references on V-restricted Q-learning (\code{type = "rqvl"}), see \doi{10.1515/ijb-2015-0052}.
-#' For references on policy tree learning (\code{type = "ptl"}), see \doi{10.48550/arXiv.1810.04778}.
+#' @references
+#' V-restricted Q-learning (\code{type = "rqvl"}): Luedtke, Alexander R., and
+#' Mark J. van der Laan. "Super-learning of an optimal dynamic treatment rule."
+#' The international journal of biostatistics 12.1 (2016): 305-332.
+#' \doi{10.1515/ijb-2015-0052}.\cr
+#' \cr
+#' Policy Tree Learning (\code{type = "ptl"}): Zhou, Zhengyuan, Susan Athey,
+#' and Stefan Wager. "Offline multi-action policy learning: Generalization and
+#' optimization." Operations Research (2022). \doi{10.1287/opre.2022.2271}.\cr
+#' \cr
+#' (Augmented) Outcome Weighted Learning: Liu, Ying, et al. "Augmented
+#' outcome‐weighted learning for estimating optimal dynamic treatment regimens."
+#' Statistics in medicine 37.26 (2018): 3776-3788. \doi{10.1002/sim.7844}.
 #' @seealso [policy_eval()]
 #' @examples
 #' library("polle")
@@ -83,10 +115,12 @@
 #' ### V-restricted (Doubly Robust) Q-learning
 #'
 #' # specifying the learner:
-#' pl <- policy_learn(type = "rqvl",
-#'                    qv_models = list(q_glm(formula = ~ C_1 + BB),
-#'                                     q_glm(formula = ~ L_1 + BB)),
-#'                    full_history = TRUE)
+#' pl <- policy_learn(
+#'   type = "rqvl",
+#'   control = control_rqvl(qv_models = list(q_glm(formula = ~ C_1 + BB),
+#'                                           q_glm(formula = ~ L_1 + BB))),
+#'   full_history = TRUE
+#' )
 #'
 #' # evaluating the learned policy
 #' pe <- policy_eval(policy_data = pd,
@@ -101,83 +135,65 @@
 #' head(get_policy(pe)(pd))
 #' @export
 policy_learn <- function(type = "rql",
+                         control = list(),
                          alpha = 0,
                          L = 1,
+                         full_history = FALSE,
                          save_cross_fit_models = FALSE,
                          future_args = list(future.seed = TRUE),
-                         full_history = FALSE,
-                         qv_models = NULL,
-                         policy_vars = NULL,
-                         depth = 2,
-                         split.step = 1,
-                         min.node.size = 1,
-                         hybrid = FALSE,
-                         search.depth = 2){
+                         name = type
+){
+
+  pl_args <- list(
+    alpha = alpha,
+    L = L,
+    save_cross_fit_models = save_cross_fit_models,
+    future_args = future_args,
+    full_history = full_history
+  )
+
+  if (length(type) != 1 | !is.character(type))
+    stop("type must be a character string.")
   type <- tolower(type)
-
-  fm <- formals()
-  cl <- match.call()
-  for (i in setdiff(names(fm), names(cl)))
-    cl[i] <- list(fm[[i]])
-
-  pl_args <- as.list(cl)[-1]
-  pl_args[["type"]] <- NULL
-
   if (type %in% c("rql", "ql", "q_learning", "q-learning")) {
-    pl <- function(policy_data,
-                   g_models = NULL, g_functions = NULL, g_full_history = FALSE,
-                   q_models, q_full_history = FALSE, verbose = FALSE){
-      fm <- formals()
-      cl <- match.call()
-      for (i in setdiff(names(fm), names(cl)))
-        cl[i] <- list(fm[[i]])
-
-      eval_args <- as.list(cl)[-1]
-      rql_args <- append(pl_args, eval_args)
-
-      do.call(what = "rql", rql_args)
-    }
-  }
-  else if (type %in% c("rqvl", "qvl", "qv_learning", "qv-learning")) {
-    pl <- function(policy_data,
-                   g_models = NULL, g_functions = NULL, g_full_history = FALSE,
-                   q_models, q_full_history = FALSE, verbose = FALSE){
-      fm <- formals()
-      cl <- match.call()
-      for (i in setdiff(names(fm), names(cl)))
-        cl[i] <- list(fm[[i]])
-
-      eval_args <- as.list(cl)[-1]
-      rqvl_args <- append(pl_args, eval_args)
-
-      do.call(what = "rqvl", rqvl_args)
-    }
+    call <- "rql"
+  } else if (type %in% c("rqvl", "qvl", "qv_learning", "qv-learning")) {
+    call <- "rqvl"
   } else if (type %in% c("ptl", "policytree", "policy_tree")){
     if (!requireNamespace("policytree")) {
       stop("The policytree package is required to perform value searching using trees.")
     }
-    pl <- function(policy_data,
-                   g_models = NULL, g_functions = NULL, g_full_history = FALSE,
-                   q_models, q_full_history = FALSE, verbose = FALSE){
-
-      fm <- formals()
-      cl <- match.call()
-      for (i in setdiff(names(fm), names(cl)))
-        cl[i] <- list(fm[[i]])
-
-      eval_args <- as.list(cl)[-1]
-      ptl_args <- append(pl_args, eval_args)
-
-      do.call(what = "ptl", ptl_args)
+    call <- "ptl"
+  } else if (type %in% c("owl", "bowl")){
+    if (!requireNamespace("DTRlearn2")) {
+      stop("The DTRlearn2 package is required to perform value searching using outcome-weighted learning.")
     }
+    call <- "dtrlearn2_owl"
+  } else if (type %in% c("earl")){
+    call <- "dyntxregime_earl"
+  } else if (type %in% c("rwl")){
+    call <- "dyntxregime_rwl"
   } else{
-    stop("Unknown type of policy learner. Use 'rql', 'rqvl' or 'ptl'")
+    stop("Unknown type of policy learner. Use 'rql', 'rqvl', 'ptl', 'owl', 'earl' or 'rwl'.")
   }
+  args <- append(pl_args, control)
+  pl <- pl(call = call, args = args)
   class(pl) <- c("policy_learn", "function")
   attr(pl, "type") <- type
   attr(pl, "pl_args") <- pl_args
+  attr(pl, "name") <- name
 
   return(pl)
+}
+
+pl <- function(call, args){
+  function(policy_data,
+           g_models = NULL, g_functions = NULL, g_full_history = FALSE,
+           q_models, q_full_history = FALSE){
+    eval_args <- as.list(environment())
+    args <- append(args, eval_args)
+    do.call(what = call, args)
+  }
 }
 
 #' @rdname policy_learn
@@ -234,7 +250,7 @@ print.policy_learn <- function(x, ...) {
 #' # evaluating the policy:
 #' pe1 <- policy_eval(policy_data = pd1,
 #'                    policy_learn = policy_learn(type = "rqvl",
-#'                                                qv_models = q_glm(~.)),
+#'                                                control = control_rqvl(qv_models = q_glm(~.))),
 #'                    g_models = g_glm(),
 #'                    q_models = q_glm())
 #'
@@ -274,7 +290,7 @@ get_policy_object.policy_eval <- function(object){
 #'
 #' # specifying the learner:
 #' pl <- policy_learn(type = "rqvl",
-#'                    qv_models = q_glm(formula = ~ C))
+#'                    control = control_rqvl(qv_models = q_glm(formula = ~ C)))
 #'
 #' # fitting the policy (object):
 #' po <- pl(policy_data = pd,
@@ -333,8 +349,8 @@ get_policy.policy_eval <- function(object){
 #' ### Realistic V-restricted Policy Tree Learning
 #' # specifying the learner:
 #' pl <- policy_learn(type = "ptl",
-#'                    policy_vars = list(c("C_1", "BB"),
-#'                                       c("L_1", "BB")),
+#'                    control = control_ptl(policy_vars = list(c("C_1", "BB"),
+#'                                                             c("L_1", "BB"))),
 #'                    full_history = TRUE,
 #'                    alpha = 0.05)
 #'

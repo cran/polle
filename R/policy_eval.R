@@ -1,5 +1,3 @@
-
-
 #' Policy Evaluation
 #'
 #' \code{policy_eval()} is used to estimate the value of a given fixed policy or a data adaptive policy (e.g. a policy learned from the data).
@@ -27,6 +25,7 @@
 #' @param M Number of folds for cross-fitting.
 #' @param type Type of evaluation (dr/doubly robust, ipw/inverse propensity weighting, or/outcome regression).
 #' @param future_args Arguments passed to [future.apply::future_apply()].
+#' @param name Character string.
 #' @param object,x,y Objects of class "policy_eval".
 #' @param labels Name(s) of the estimate(s).
 #' @param paired \code{TRUE} indicates that the estimates are based on
@@ -120,8 +119,13 @@
 #' \frac{I\{A_j = d_j(...)\}}{g_{j}(H_j, A_j)}
 #' \{Q_{r+1}^d(H_{r+1} , d_{r+1}(...)) - Q_{r}^d(H_r , d_r(...))\}.
 #' }
-#' @details
-#' For references, see \doi{10.1515/jci-2013-0022}, \doi{10.1201/9780429192692}.
+#' @references
+#' van der Laan, Mark J., and Alexander R. Luedtke. "Targeted learning of the
+#' mean outcome under an optimal dynamic treatment rule." Journal of causal
+#' inference 3.1 (2015): 61-95. \doi{10.1515/jci-2013-0022}\cr
+#' \cr
+#' Tsiatis, Anastasios A., et al. Dynamic treatment regimes: Statistical methods
+#'for precision medicine. Chapman and Hall/CRC, 2019. \doi{10.1201/9780429192692}.
 #' @export
 #' @examples
 #' library("polle")
@@ -131,14 +135,15 @@
 #' pd1 <- policy_data(d1, action="A", covariates=list("Z", "B", "L"), utility="U")
 #' pd1
 #'
-#' # defining a static policy:
-#' pl1 <- policy_def(static_policy(1))
+#' # defining a static policy (A=1):
+#' pl1 <- policy_def(1)
 #'
 #' # evaluating the policy:
 #' pe1 <- policy_eval(policy_data = pd1,
 #'                    policy = pl1,
 #'                    g_models = g_glm(),
-#'                    q_models = q_glm())
+#'                    q_models = q_glm(),
+#'                    name = "A=1 (glm)")
 #'
 #' # summarizing the estimated value of the policy:
 #' # (equivalent to summary(pe1)):
@@ -156,9 +161,10 @@
 #' # evaluating the policy using random forest nuisance models:
 #' set.seed(1)
 #' pe1_rf <- policy_eval(policy_data = pd1,
-#'                    policy = pl1,
-#'                    g_models = g_rf(),
-#'                    q_models = q_rf())
+#'                       policy = pl1,
+#'                       g_models = g_rf(),
+#'                       q_models = q_rf(),
+#'                       name = "A=1 (rf)")
 #'
 #' # merging the two estimates (equivalent to pe1 + pe1_rf):
 #' (est1 <- merge(pe1, pe1_rf))
@@ -169,17 +175,18 @@
 #' source(system.file("sim", "two_stage.R", package="polle"))
 #' d2 <- sim_two_stage(5e2, seed=1)
 #' pd2 <- policy_data(d2,
-#'                   action = c("A_1", "A_2"),
-#'                   covariates = list(L = c("L_1", "L_2"),
-#'                                     C = c("C_1", "C_2")),
-#'                   utility = c("U_1", "U_2", "U_3"))
+#'                    action = c("A_1", "A_2"),
+#'                    covariates = list(L = c("L_1", "L_2"),
+#'                                      C = c("C_1", "C_2")),
+#'                    utility = c("U_1", "U_2", "U_3"))
 #' pd2
 #'
 #' # defining a policy learner based on cross-fitted doubly robust Q-learning:
 #' pl2 <- policy_learn(type = "rqvl",
-#'                    qv_models = list(q_glm(~C_1), q_glm(~C_1+C_2)),
-#'                    full_history = TRUE,
-#'                    L = 2) # number of folds for cross-fitting
+#'                     control = control_rqvl(qv_models = list(q_glm(~C_1),
+#'                                                             q_glm(~C_1+C_2))),
+#'                     full_history = TRUE,
+#'                     L = 2) # number of folds for cross-fitting
 #'
 #' # evaluating the policy learner using 2-fold cross fitting:
 #' pe2 <- policy_eval(type = "dr",
@@ -187,7 +194,8 @@
 #'                    policy_learn = pl2,
 #'                    q_models = q_glm(),
 #'                    g_models = g_glm(),
-#'                    M = 2) # number of folds for cross-fitting
+#'                    M = 2, # number of folds for cross-fitting
+#'                    name = "rqvl")
 #' # summarizing the estimated value of the policy:
 #' pe2
 #'
@@ -198,19 +206,14 @@ policy_eval <- function(policy_data,
                         g_functions=NULL, g_models=g_glm(), g_full_history = FALSE,
                         q_functions=NULL, q_models=q_glm(), q_full_history = FALSE,
                         type = "dr",
-                        M=1, future_args = list(future.seed = TRUE)
+                        M=1, future_args = list(future.seed = TRUE),
+                        name = NULL
                         ) {
-  args <- list(
-    policy = policy,
-    policy_learn = policy_learn,
-    g_functions = g_functions,
-    g_models = g_models,
-    g_full_history = g_full_history,
-    q_functions = q_functions,
-    q_models = q_models,
-    q_full_history = q_full_history,
-    type = type
-  )
+  args <- as.list(environment())
+  args[["policy_data"]] <- NULL
+  args[["M"]] <- NULL
+  args[["future_args"]] <- NULL
+  args[["name"]] <- NULL
 
   if (M > 1){
     val <- policy_eval_cross(args = args,
@@ -222,8 +225,14 @@ policy_eval <- function(policy_data,
     args[["valid_policy_data"]] <- policy_data
     val <- do.call(what = policy_eval_type, args = args)
   }
+  if (is.null(name)){
+    if (!is.null(policy))
+      val$name <- attr(policy, "name")
+    else
+      val$name <- attr(policy_learn, "name")
+  } else
+    val$name <- name
 
-  val$name <- attr(policy, "name")
   return(val)
 }
 
@@ -494,7 +503,7 @@ get_policy.policy_eval <- function(object){
 #'
 #' # defining a policy learner based on cross-fitted doubly robust Q-learning:
 #' pl2 <- policy_learn(type = "rqvl",
-#'                    qv_models = list(q_glm(~C_1), q_glm(~C_1+C_2)),
+#'                    control = control_rqvl(qv_models = list(q_glm(~C_1), q_glm(~C_1+C_2))),
 #'                    full_history = TRUE,
 #'                    L = 2) # number of folds for cross-fitting
 #'
