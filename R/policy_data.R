@@ -1,4 +1,4 @@
-new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
+new_policy_data <- function(stage_data, baseline_data = NULL, action_set = NULL, stage_action_sets = NULL, verbose){
 
   # checking and processing stage_data:
   {
@@ -39,13 +39,42 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
     }
     rm(event, A)
 
-    # getting the set of actions (A):
-    action_set <- sort(unlist(unique(stage_data[,"A"])))
+    # getting the global set of actions (A):
+    obs_actions <- sort(unlist(unique(stage_data[,"A"])))
+    if (!is.null(action_set)){
+      action_set <- as.character(action_set)
+      if (!all(obs_actions %in% action_set))
+        stop("The given action set does not include all observed actions.")
+      action_set <- sort(action_set)
+    } else{
+      action_set <- obs_actions
+    }
+    action_set <- unname(action_set)
+
+    # getting the action set at each stage:
+    event <- NULL
+    tmp <- stage_data[event == 0, list(set = list(sort(unique(A)))), stage]
+    obs_stage_action_sets <- lapply(tmp$set, c)
+    names(obs_stage_action_sets) <- paste("stage_", tmp$stage, sep = "")
+    rm(event, tmp)
+    if (!is.null(stage_action_sets)){
+      if(length(stage_action_sets) != length(obs_stage_action_sets))
+        stop("the given stage action set does not comply with the observed stage action sets.")
+      for (k in seq_along(stage_action_sets)){
+        if (!all(obs_stage_action_sets[[k]] %in% stage_action_sets[[k]]))
+          stop("The given stage action sets do not include all observed stage actions.")
+        stage_action_sets <- lapply(stage_action_sets, sort)
+      }
+
+    } else {
+      stage_action_sets <- obs_stage_action_sets
+    }
 
     # checking the utility variable (U):
     if (!all(is.numeric(unlist(stage_data[,"U"]))))
-      stop("'utility' (U) must be numeric.")
-    if(any(is.na(stage_data[,"U"]))) stop("'utility' (U) has missing values")
+      stop("'utility' U must be numeric.")
+    if(any(is.na(stage_data[,"U"])))
+      stop("The utility varible U has missing values")
 
     # checking the deterministic reward variables (U_A[.]):
     deterministic_reward_names <- paste("U_A", action_set, sep = "")
@@ -53,7 +82,7 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
       deterministic_reward_names[!(deterministic_reward_names %in% names(stage_data))]
     if (length(missing_deterministic_reward_names) > 0){
       mes <- paste(missing_deterministic_reward_names, collapse = ", ")
-      mes <- paste("Setting the deterministic reward(s) '", mes, "' to default value 0.", sep = "")
+      mes <- paste("Setting the deterministic rewards '", mes, "' to default value 0.", sep = "")
       if (verbose == TRUE){
         message(mes)
       }
@@ -70,7 +99,7 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
     if (any(sdf)){
       f_names <- colnames(stage_data)[sdf]
       stage_data[, (f_names) := lapply(.SD, as.character), .SDcols = f_names]
-      rm(mes, f_names)
+      rm(f_names)
     }
     rm(sdf)
 
@@ -103,7 +132,7 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
       if (any(bdf)){
         f_names <- colnames(baseline_data)[bdf]
         baseline_data[, (f_names) := lapply(.SD, as.character), .SDcols = f_names]
-        rm(mes, f_names)
+        rm(f_names)
       }
       rm(bdf)
 
@@ -131,6 +160,7 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
       baseline_names = baseline_names
     ),
     action_set = action_set,
+    stage_action_sets = stage_action_sets,
     dim = list(
       n = n,
       K = K
@@ -175,9 +205,12 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
 #' @param id ID variable name. Character string.
 #' @param stage Stage number variable name.
 #' @param event Event indicator name.
+#' @param action_set Character string. Action set across all stages.
 #' @param verbose Logical. If TRUE, formatting comments are printed to the console.
 #' @param digits Minimum number of digits to be printed.
 #' @param x Object to be printed.
+#' @param object Object of class [policy_data]
+#' @param probs numeric vector (probabilities)
 #' @param ... Additional arguments passed to print.
 #' @details
 #' Each observation has the sequential form
@@ -204,7 +237,9 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
 #'                        covariate names, and the deterministic reward variable
 #'                        names.}
 #' \item{\code{action_set}}{Sorted character vector describing the action set, i.e.,
-#'                          the possible actions at each stage.}
+#'                          the possible actions at all stages.}
+#' \item{\code{stage_action_sets}}{List of sorted character vectors describing
+#'                                 the observed actions at each stage.}
 #' \item{\code{dim}}{List containing the number of observations (n) and the
 #'                   number of stages (K).}
 #' @section S3 generics:
@@ -213,20 +248,20 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
 #' \itemize{
 #' \item{[partial()]}{ Trim the maximum number
 #'                              of stages in a \code{policy_data} object.}
-#' \item{[subset.policy_data()]}{ Subset a a \code{policy_data} object on ID.}
+#' \item{[subset_id()]}{ Subset a a \code{policy_data} object on ID.}
 #' \item{[get_history()]}{ Summarize the history and action at
 #'                                    a given stage.}
 #' \item{[get_history_names()]}{ Get history variable names.}
 #' \item{[get_actions()]}{ Get the action at every stage.}
 #' \item{[get_utility()]}{Get the utility.}
+#' \item{[plot()]}{Plot method.}
 #' }
 #' @seealso
 #' [policy_eval()], [policy_learn()], [copy_policy_data()]
 #' @examples
 #' library("polle")
 #' ### Single stage: Wide data
-#' source(system.file("sim", "single_stage.R", package="polle"))
-#' d1 <- sim_single_stage(5e2, seed=1)
+#' d1 <- sim_single_stage(n = 5e2, seed=1)
 #' head(d1, 5)
 #' # constructing policy_data object:
 #' pd1 <- policy_data(d1,
@@ -241,7 +276,6 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
 #' head(get_history(pd1)$H, 5)
 #'
 #' ### Two stage: Wide data
-#' source(system.file("sim", "two_stage.R", package="polle"))
 #' d2 <- sim_two_stage(5e2, seed=1)
 #' head(d2, 5)
 #' # constructing policy_data object:
@@ -256,7 +290,6 @@ new_policy_data <- function(stage_data, baseline_data = NULL, verbose){
 #' head(get_history(pd2, stage = 2, full_history = TRUE)$H, 5) # Full history and action, (H_k,A_k).
 #'
 #' ### Multiple stages: Long data
-#' source(system.file("sim", "multi_stage.R", package="polle"))
 #' d3 <- sim_multi_stage(5e2, seed = 1)
 #' head(d3$stage_data, 10)
 #' # constructing policy_data object:
@@ -278,6 +311,7 @@ policy_data <- function(data, baseline_data,
                         baseline = NULL,
                         deterministic_rewards = NULL,
                         id = NULL, stage = NULL, event = NULL,
+                        action_set = NULL,
                         verbose = FALSE) {
   data <- check_data(data)
   data <- copy(data)
@@ -287,7 +321,7 @@ policy_data <- function(data, baseline_data,
   }
 
   if(!(is.character(type) & (length(type == 1))))
-    stop("'type' must be either \"wide\ or \"long\".")
+    stop("'type' must be either \"wide\" or \"long\".")
   type <- tolower(type)
   if (any(type %in% c("wide"))) {
     if (!missing(baseline_data)){
@@ -309,9 +343,16 @@ policy_data <- function(data, baseline_data,
     pd <- new_policy_data(
       stage_data = md$stage_data,
       baseline_data = md$baseline_data,
+      action_set = action_set,
       verbose = verbose
     )
   } else if (any(type %in% "long")) {
+    if (!is.null(deterministic_rewards))
+      warning("deterministic_rewards is not used when type = 'long'.")
+    if (missing(covariates))
+      covariates <- NULL
+    if(!is.null(covariates))
+      warning("covariates is not used when type = 'long'.")
 
     ld <- format_long_data(
       data,
@@ -328,10 +369,11 @@ policy_data <- function(data, baseline_data,
     pd <- new_policy_data(
       stage_data = ld$stage_data,
       baseline_data = ld$baseline_data,
+      action_set = action_set,
       verbose = verbose)
 
   } else{
-    stop("'type' must be either \"wide\ or \"long\".")
+    stop("'type' must be either \"wide\" or \"long\".")
   }
   return(pd)
 }
@@ -381,6 +423,12 @@ melt_wide_data <- function(wide_data,
     stop("'action' must be a vector or a list of type character.")
   # getting the number of stages:
   K <- length(action)
+  if(!all(action %in% colnames(wide_data))){
+    mes <- paste(action[!(action %in% colnames(wide_data))], collapse = ",")
+    mes <- paste("Action variables ", mes, " not found in data.", sep = "")
+    stop(mes)
+  }
+
   # getting the action set:
   action_set <- sort(unique(unlist(wide_data[ , action, with = FALSE])))
 
@@ -451,7 +499,7 @@ melt_wide_data <- function(wide_data,
   if (!all(tmp %in% names(wide_data))){
     mes <- tmp[!(tmp %in% names(wide_data))]
     mes <- paste(mes, collapse = "\", \"")
-    mes <- paste("Not found in data: \"", mes, "\".", sep = "")
+    mes <- paste("Variables not found in data: \"", mes, "\".", sep = "")
     stop(mes)
   }
   rm(tmp)
@@ -617,7 +665,7 @@ format_long_data <- function(long_data, baseline_data, id, action, stage, event,
   deterministic_reward_names <- paste("U_A", action_set, sep = "")
   drn <- names(long_data)[names(long_data) %in% deterministic_reward_names]
   if ((length(drn) > 0) & (verbose == TRUE)){
-    mes <- paste("The variable(s) ", paste(drn, collapse = ", "), " in 'data' are considered deternistic rewards.", sep = "")
+    mes <- paste("The variables ", paste(drn, collapse = ", "), " in 'data' are considered deternistic rewards.", sep = "")
     message(mes)
   }
 

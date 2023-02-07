@@ -37,15 +37,17 @@ control_owl <- function(policy_vars = NULL,
 }
 
 dtrlearn2_owl <- function(policy_data,
-                 alpha,
-                 g_models, g_functions, g_full_history,
-                 policy_vars, full_history,
-                 L, save_cross_fit_models, future_args,
-                 reuse_scales,
-                 res.lasso, loss, kernel,
-                 augment, c, sigma,
-                 s, m,
-                 ...){
+                          alpha,
+                          g_models, g_functions, g_full_history,
+                          policy_vars, full_history,
+                          L,
+                          cross_fit_g_models, save_cross_fit_models,
+                          future_args,
+                          reuse_scales,
+                          res.lasso, loss, kernel,
+                          augment, c, sigma,
+                          s, m,
+                          ...){
 
   if ((is.null(g_models) & is.null(g_functions)))
     stop("Provide either g-models or g-functions.")
@@ -53,13 +55,16 @@ dtrlearn2_owl <- function(policy_data,
   K <- get_K(policy_data)
   n <- get_n(policy_data)
   action_set <- get_action_set(policy_data)
+  stage_action_sets <- get_stage_action_sets(policy_data)
   id_stage <- get_id_stage(policy_data)
 
   if(!(length(unlist(unique(id_stage[,.N, by = "id"][, "N"]))) == 1))
     stop("owl is only implemented for a fixed number of stages.")
 
-  if (!(length(action_set) == 2))
-    stop("owl only works for binary actions.")
+  for (k in seq_along(stage_action_sets)){
+    if (length(stage_action_sets[[k]]) != 2)
+      stop("owl only works for dichotomous stage action sets.")
+  }
 
   if (alpha != 0)
     stop("alpha must be 0 when type = 'owl'")
@@ -75,9 +80,6 @@ dtrlearn2_owl <- function(policy_data,
   # getting the IDs:
   id <- get_id(policy_data)
 
-  # getting the observed (complete) utilities:
-  # utility <- get_utility(policy_data)
-
   # getting the rewards
   rewards <- get_rewards(policy_data)
 
@@ -88,15 +90,9 @@ dtrlearn2_owl <- function(policy_data,
     folds <- NULL
   }
 
+  # (cross-)fitting the g-functions:
   g_functions_cf <- NULL
-  if (is.null(folds)){
-    if (is.null(g_functions)){
-      # fitting the g-functions:
-      g_functions <- fit_g_functions(policy_data, g_models, full_history = g_full_history)
-    }
-    g_values <- evaluate(g_functions, policy_data)
-  } else{
-    # cross-fitting the g-functions:
+  if (!is.null(folds) & cross_fit_g_models == TRUE){
     g_cf <- fit_g_functions_cf(
       policy_data = policy_data,
       g_models = g_models,
@@ -107,19 +103,27 @@ dtrlearn2_owl <- function(policy_data,
     if (save_cross_fit_models == TRUE){
       g_functions_cf <- getElement(g_cf, "functions")
     }
-
     g_values <- getElement(g_cf, "values")
-    # fitting the non-cross-fitted g-functions
-    # for determining future realistic actions:
-    if (alpha > 0){
-      if (is.null(g_functions)){
-        g_functions <- fit_g_functions(policy_data,
-                                       g_models = g_models,
-                                       full_history = g_full_history)
-      }
-    } else{
-      g_functions <- NULL
+    rm(g_cf)
+  } else {
+    if (is.null(g_functions)){
+      g_functions <- fit_g_functions(policy_data,
+                                     g_models = g_models,
+                                     full_history = g_full_history)
     }
+    g_values <- predict(g_functions, policy_data)
+  }
+
+  # fitting g-functions for determining new realistic actions:
+  if (alpha > 0){
+    if (is.null(g_functions)){
+      g_functions <- fit_g_functions(policy_data,
+                                     g_models = g_models,
+                                     full_history = g_full_history)
+    }
+  } else{
+    # g-functions are not saved if alpha == 0:
+    g_functions <- NULL
   }
 
   # (n X K) matrix with entries U_{i,k+1}:
@@ -166,10 +170,11 @@ dtrlearn2_owl <- function(policy_data,
     X[[k]] <- x
     X_scales[[k]] <- attributes(x)[c("scaled:center", "scaled:scale")]
 
+    stage_action_set <- stage_action_sets[[k]]
     # formatting the actions as {-1, 1}:
     aa <- A <- get_A(policy_history_k)
-    aa[A == action_set[1]] <- -1
-    aa[A == action_set[2]] <- 1
+    aa[A == stage_action_set[1]] <- -1
+    aa[A == stage_action_set[2]] <- 1
     aa <- as.numeric(aa)
     AA[[k]] <- aa
 
@@ -204,15 +209,16 @@ dtrlearn2_owl <- function(policy_data,
     full_history = full_history,
     policy_vars = policy_vars,
     action_set = action_set,
+    stage_action_sets = stage_action_sets,
     K = K
   )
-  class(out) <- "OWL"
+  class(out) <- c("owl","policy_object","list")
 
   return(out)
 }
 
 #' @export
-get_policy.OWL <- function(object){
+get_policy.owl <- function(object){
   owl_object <- getElement(object, "owl_object")
   reuse_scales <- getElement(object, "reuse_scales")
   X_scales <- getElement(object, "X_scales")
@@ -220,7 +226,7 @@ get_policy.OWL <- function(object){
   g_functions <- getElement(object, "g_functions")
   full_history <- getElement(object, "full_history")
   policy_vars <- getElement(object, "policy_vars")
-  action_set <- getElement(object, "action_set")
+  stage_action_sets <- getElement(object, "stage_action_sets")
   K <- getElement(object, "K")
 
   policy <- function(policy_data){
@@ -241,15 +247,10 @@ get_policy.OWL <- function(object){
       } else{
         vars <- policy_vars
       }
+      # getting the design matrix:
       H <- get_H(policy_history_k, vars = vars)
-
       design <- X_designs[[k]]
-      x <- model.frame(design$terms,
-                       data=H,
-                       xlev = design$x_levels,
-                       drop.unused.levels=FALSE)
-      x <- model.matrix(x, data=H, xlev = design$x_levels)
-
+      x <- apply_design(design, data = H)
       if (reuse_scales == TRUE){
         x <- scale(x,
                    center = X_scales[[k]]$`scaled:center`,
@@ -266,9 +267,10 @@ get_policy.OWL <- function(object){
     stage <- NULL
     d <- NULL
     for (k in K:1){
+      stage_action_set <- stage_action_sets[[k]]
       dd <- d_ <- pred$treatment[[k]]
-      d_[dd == -1] <- action_set[1]
-      d_[dd == 1] <- action_set[2]
+      d_[dd == -1] <- stage_action_set[1]
+      d_[dd == 1] <- stage_action_set[2]
       policy_actions[stage == k, d := d_]
     }
     rm(stage)

@@ -1,34 +1,22 @@
 #' @rdname policy_data
 #' @export
 print.policy_data <- function(x, digits = 2, ...){
-  K <- get_K(x)
-  n <- get_n(x)
-
+  s <- summary(x, probs=NULL)
   cat(
-    paste("Policy data with n = ", n, " observations and maximal K = ", K, " stages.", sep = "")
+    paste("Policy data with n = ", s$n,
+          " observations and maximal K = ", s$K,
+          " stages.", sep = "")
+  )
+  cat("\n\n")
+  print(s$tab)
+
+  cat("\n")
+  cat(
+    paste("Baseline covariates: ", s$baseline_covar, sep = "")
   )
   cat("\n")
-
-  action_set <- get_action_set(x)
-  stage_data <- getElement(x, "stage_data")
-  event <- NULL
-
-  cat("\n")
-  st <- stage_data[event == 0,][, c("stage", "A"), with = FALSE]
-  colnames(st) <- c("stage", "action")
-  stable <- addmargins(table(st), 2, FUN = list(n = sum))
-
-  print(stable)
-
-  cat("\n")
-  bc <- paste(x$colnames$baseline_names, collapse = ", ")
   cat(
-    paste("Baseline covariates: ", bc, sep = "")
-  )
-  cat("\n")
-  sc <- paste(x$colnames$state_names, collapse = ", ")
-  cat(
-    paste("State covariates: ", sc, sep = "")
+    paste("State covariates: ", s$stage_covar, sep = "")
   )
   cat("\n")
   mean_utility <- mean(get_utility(x)$U)
@@ -38,6 +26,230 @@ print.policy_data <- function(x, digits = 2, ...){
     paste("Average utility: ", mean_utility, sep = "")
   )
   cat("\n")
+}
+
+#' @rdname policy_data
+#' @export
+summary.policy_data <- function(object, probs=seq(0, 1, .25), ...) {
+  K <- get_K(object)
+  n <- get_n(object)
+  stage <- event <- NULL  # R-check glob. var.
+  action_set <- get_action_set(object)
+  stage_data <- getElement(object, "stage_data")
+  st <- stage_data[event == 0,][, c("stage", "A"), with = FALSE]
+  st$A <- factor(st$A, levels = action_set)
+  colnames(st) <- c("stage", "action")
+  tab <- table(st)
+  stable <- addmargins(tab, 2, FUN = list(n = sum))
+  bc <- paste(object$colnames$baseline_names, collapse = ", ")
+  sc <- paste(object$colnames$state_names, collapse = ", ")
+  stagedist <- list()
+  dt <- get_cum_rewards(object)
+  if (!is.null(probs))
+    for (i in seq_len(K+1)) {
+      ss <- dt[stage==i]
+      val <- stats::quantile(ss[["U"]], probs = probs, ...)
+      stagedist <- append(stagedist, list(val))
+    }
+  res <- list(n=n, K=K, tab=stable, stagedist=stagedist,
+              baseline_covar=bc, stage_covar=sc)
+  class(res) <- "summary.policy_data"
+  res
+}
+
+#' Plot policy data for given policies
+#'
+#' @param x Object of class [policy_data]
+#' @param policy An object or list of objects of class [policy]
+#' @param which A subset of the numbers 1:2
+#' \itemize{
+#'  \item{1} Spaghetti plot of the cumulative rewards
+#'  \item{2} Plot of the policy actions for a given stage
+#' }
+#' @param stage Stage number for plot 2
+#' @param history_variables character vector of length 2 for plot 2
+#' @param jitter numeric
+#' @param ... Additional arguments
+#' @examples
+#' library("polle")
+#' library("data.table")
+#' setDTthreads(1)
+#' d3 <- sim_multi_stage(2e2, seed = 1)
+#' pd3 <- policy_data(data = d3$stage_data,
+#'                    baseline_data = d3$baseline_data,
+#'                    type = "long",
+#'                    id = "id",
+#'                    stage = "stage",
+#'                    event = "event",
+#'                    action = "A",
+#'                    utility = "U")
+#'
+#' # specifying two static policies:
+#' p0 <- policy_def(c(1,1,0,0), name = "p0")
+#' p1 <- policy_def(c(1,0,0,0), name = "p1")
+#'
+#' plot(pd3)
+#' plot(pd3, policy = list(p0, p1))
+#'
+#' # learning and plotting a policy:
+#' suppressWarnings({
+#'  pe3 <- policy_eval(pd3,
+#'                     policy_learn = policy_learn(),
+#'                     q_models = q_glm(formula = ~t + X + X_lead))
+#' plot(pd3, list(get_policy(pe3), p0))
+#'
+#' # plotting the recommended actions at a specific stage:
+#' plot(pd3, get_policy(pe3),
+#'      which = 2,
+#'      stage = 2,
+#'      history_variables = c("t","X"))
+#' })
+#' @export
+plot.policy_data <- function(x,
+                             policy=NULL,
+                             which = c(1),
+                             stage = 1,
+                             history_variables = NULL,
+                             jitter=.05,
+                             ...) {
+  policy_data <- x
+  if (!is.numeric(which) || any(which < 1) || any(which > 2))
+    stop("'which' must be in 1:2")
+  show <- rep(FALSE, 2)
+  show[which] <- TRUE
+
+  if (!is.null(stage)){
+    if (!(is.numeric(stage) & (length(stage) == 1)))
+      stop("stage must be an integer greater than 0.")
+    if (!(stage %% 1 == 0))
+      stop("stage must be an integer greater than 0.")
+    if (stage<=0)
+      stop("stage must be an integer greater than 0.")
+  }
+  stage_ <- stage
+
+  if (show[1L]) {
+    dt <- get_cum_rewards(policy_data, policy = policy)
+    if (nrow(dt) == 0)
+      stop("No observations comply with the given policy/policies.")
+    lev <- unique(dt[["policy_group"]])
+    id <- stage <- NULL  # R-check glob. var.
+    dots <- list(...)
+    pargs <- c("col","lty","pch")
+    for (p in pargs) {
+      if (is.null(dots[[p]])) {
+        dots[[p]] <- seq_len(length(policy)+1)
+      }
+      dots[[p]] <- rep(dots[[p]], length.out=length(policy)+1)
+    }
+    ylab <- "Cumulative reward"
+    xlab <- "Stage"
+    legend <- "topleft"
+    for (p in c("xlab","ylab","legend")) {
+      if (!is.null(dots[[p]])) {
+        assign(p, dots[[p]])
+        dots[[p]] <- NULL
+      }
+    }
+    plot(U ~ stage, data=dt, type="n", xlab="", ylab="", axes=FALSE)
+    for (i in seq_along(lev)) {
+      di <- subset(dt, dt$policy_group==lev[i])
+      wide <- t(dcast(di,
+                      id ~ stage, value.var="U")[,-1])
+      args <- dots
+      for (p in pargs)
+        args[[p]] <- args[[p]][i]
+
+      do.call(graphics::points, c(list(U ~ base::jitter(as.numeric(stage), jitter),
+                                       data=di),
+                                  args))
+      do.call(graphics::matlines, c(list(wide), args))
+    }
+    graphics::title(xlab=xlab, ylab=ylab)
+    if (length(lev)>0 && !is.null(legend)) {
+      graphics::legend(legend, legend=lev,
+                       col=dots$col,
+                       pch=dots$pch,
+                       lty=dots$lty)
+    }
+    graphics::box()
+    graphics::axis(2)
+    graphics::axis(1, at=1:get_K(x))
+    grDevices::dev.flush()
+  }
+  if (show[2L]){
+    if (is.null(policy_data) | !inherits(policy_data, "policy_data"))
+      stop("For plot 2 please provide policy_data.")
+    K <- get_K(policy_data)
+    if (!(stage_ <= K))
+      stop("stage must be lower than or equal to the maximal number of stages.")
+    if (is.null(history_variables))
+      stop("For plot 2 please provide history_variables (character vector of length 2).")
+    if (!(is.character(history_variables) & length(history_variables)==2))
+      stop("For plot 2 please provide history_variables (character vector of length 2).")
+
+    plot_data <- data.table::merge.data.table(
+      policy(policy_data)[stage ==stage_],
+      get_history(policy_data)[["H"]][stage ==stage_]
+    )
+
+    if (!all(history_variables %in% colnames(plot_data)))
+      stop("Invalid history_variables.")
+
+    d <- as.factor(plot_data[["d"]])
+    main <- paste("Plot of policy actions at stage ", stage_, sep = "")
+    xx <- plot_data[[history_variables[1]]]
+    if (is.character(xx))
+      xx <- factor(xx, levels = sort(unique(xx)))
+    yy <- plot_data[[history_variables[2]]]
+    if (is.character(yy))
+      yy <- factor(yy, levels = sort(unique(yy)))
+    graphics::plot.default(
+      x = xx,
+      xlab = history_variables[1],
+      xaxt = 'n',
+      y = yy,
+      yaxt = 'n',
+      ylab = history_variables[2],
+      main = main,
+      col=d,
+      ...)
+    graphics::legend('topright', legend = levels(d), col = 1:8, cex = 0.8, pch = 1)
+    if (is.factor(xx)){
+      graphics::axis(1, at=(1:length(levels(xx))),labels=levels(xx))
+    } else {
+      graphics::axis(1)
+    }
+    if (is.factor(yy)){
+      graphics::axis(2, at=(1:length(levels(yy))),labels=levels(yy))
+    } else {
+      graphics::axis(2)
+    }
+    grDevices::dev.flush()
+  }
+
+  invisible()
+}
+
+#' @export
+print.summary.policy_data <- function(x, ...) {
+  cat(paste("Policy data with n = ", x$n,
+            " observations and maximal K = ",
+            x$K, " stages.\n", sep = ""))
+  cat("\n")
+  print(x$tab)
+  cat("\n")
+  cat(paste("Baseline covariates: ", x$baseline_covar, sep = ""))
+  cat("\n")
+  cat(paste("Stage covariates: ", x$stage_covar, sep = ""))
+  cat("\n")
+
+  cat("\n")
+  for (i in 1:(x$K+1)) {
+    cat("Cumulative reward distribution at stage ",i,":\n", sep="")
+    print(x$stagedist[[i]])
+    cat("\n")
+  }
 }
 
 #' Copy Policy Data Object
@@ -53,7 +265,6 @@ print.policy_data <- function(x, digits = 2, ...){
 #' @examples
 #' library("polle")
 #' ### Single stage case: Wide data
-#' source(system.file("sim", "single_stage.R", package="polle"))
 #' d1 <- sim_single_stage(5e2, seed=1)
 #' head(d1, 5)
 #' # constructing policy_data object:
@@ -83,19 +294,16 @@ copy_policy_data <- function(object){
 }
 
 partial_stage_data <- function(stage_data, K, deterministic_rewards){
-  if (is.data.frame(stage_data))
-    stage_data <- as.data.table(stage_data)
-
   required_names <- c("id", "stage", "event", "A", "U")
 
   # filtering stage_data rows up till stage K:
   stage <- NULL
   stage_data_K <- stage_data[stage <= K, ]
 
-  # filtering stage_data rows for stages above K and the required columns:
+  # filtering the residual stage data rows for stages above K:
   stage_data_res <- stage_data[stage > K, required_names, with = FALSE]
 
-  # summarizing stage_data_res as a single row:
+  # summarizing residual stage data as a single row:
   event <- U <- NULL
   stage_data_res_sum <- stage_data_res[
     ,
@@ -106,16 +314,33 @@ partial_stage_data <- function(stage_data, K, deterministic_rewards){
     ),
     by = "id"
   ]
-  if (!is.null(deterministic_rewards))
-    stage_data_res_sum[, (deterministic_rewards) := NA]
+
+  # updated action set:
+  action_set <- unname(sort(unlist(unique(stage_data_K[,"A"]))))
+  deterministic_rewards_K <- paste("U_A", action_set, sep = "")
+
+  # removing excess deterministic reward variables:
+  tmp <- setdiff(deterministic_rewards, deterministic_rewards_K)
+  if (length(tmp) > 0)
+    stage_data_K[, (tmp) := NULL]
+
+  stage_data_res_sum[, (deterministic_rewards_K) := NA]
   # binding stage_data_K with stage_data_res_sum
-  stage_data <- rbindlist(list(stage_data_K, stage_data_res_sum), fill = TRUE, use.names = TRUE)
+  stage_data <- rbindlist(list(stage_data_K, stage_data_res_sum),
+                          fill = TRUE,
+                          use.names = TRUE)
 
   # setting keys and index
   setkeyv(stage_data, c("id", "stage"))
   setindexv(stage_data, "event")
 
-  return(stage_data)
+  out <- list(
+    stage_data = stage_data,
+    action_set = action_set,
+    deterministic_rewards = deterministic_rewards_K
+  )
+
+  return(out)
 }
 
 #' Trim Number of Stages
@@ -129,7 +354,6 @@ partial_stage_data <- function(stage_data, K, deterministic_rewards){
 #' @examples
 #' library("polle")
 #' ### Multiple stage case
-#' source(system.file("sim", "multi_stage.R", package="polle"))
 #' d <- sim_multi_stage(5e2, seed = 1)
 #' # constructing policy_data object:
 #' pd <- policy_data(data = d$stage_data,
@@ -150,33 +374,45 @@ partial <- function(object, K)
 
 #' @export
 partial.policy_data <- function(object, K){
+  # input checks:
+  if (!is.numeric(K))
+    stop("K must be an integer greater than or equal to 1.")
+  if (!((K %% 1 == 0) & (K>0)))
+    stop("K must be an integer greater than or equal to 1.")
+
   # copy object to avoid reference issues in data.table
   object <- copy_policy_data(object)
 
-  if(K >= object$dim$K)
+  object_K <- get_K(object)
+  if(K >= object_K)
     return(object)
 
-  # column names of the deterministic rewards:
-  deterministic_rewards <- object$colnames$deterministic_rewards
+  # transforming the stage data:
+  psd <- partial_stage_data(
+    stage_data = object[["stage_data"]],
+    K = K,
+    deterministic_rewards = object[["colnames"]][["deterministic_rewards"]]
+  )
 
-  object$stage_data <- partial_stage_data(stage_data = object[["stage_data"]], K = K, deterministic_rewards = deterministic_rewards)
-  object$dim$K <- K
+  # updating the object
+  object[["stage_data"]] <- psd[["stage_data"]]
+  object[["dim"]][["K"]] <- K
+  object[["stage_action_sets"]] <- object[["stage_action_sets"]][1:K]
+  object[["action_set"]] <- psd[["action_set"]]
+  object[["colnames"]][["deterministic_rewards"]] <- psd[["deterministic_rewards"]]
 
   return(object)
 }
 
 #' Subset Policy Data on ID
 #'
-#' \code{subset} returns a policy data object containing the given IDs.
-#' @param x Object of class [policy_data].
+#' \code{subset_id} returns a policy data object containing the given IDs.
+#' @param object Object of class [policy_data].
 #' @param id character vectors of IDs.
-#' @param ... Additional parameters passed to lower level functions.
-#' @method subset policy_data
 #' @returns Object of class [policy_data].
 #' @examples
 #' library("polle")
 #' ### Single stage:
-#' source(system.file("sim", "single_stage.R", package="polle"))
 #' d <- sim_single_stage(5e2, seed=1)
 #' # constructing policy_data object:
 #' pd <- policy_data(d, action="A", covariates=list("Z", "B", "L"), utility="U")
@@ -186,22 +422,28 @@ partial.policy_data <- function(object, K){
 #' get_id(pd)[1:10]
 #'
 #' # subsetting on IDs:
-#' pdsub <- subset(pd, id = 250:500)
+#' pdsub <- subset_id(pd, id = 250:500)
 #' pdsub
 #' get_id(pdsub)[1:10]
 #' @export
-subset.policy_data <- function(x, id, ...){
-  if (!all(id %in% get_id(x))) stop("Invalid subset of IDs.")
+subset_id <- function(object, id)
+  UseMethod("subset_id")
+
+#' @export
+subset_id.policy_data <- function(object, id){
+  if (!all(id %in% get_id(object)))
+    stop("Invalid subset of IDs.")
   id_ <- id; rm(id)
 
   spd <- new_policy_data(
-    stage_data = x$stage_data[id %in% id_],
-    baseline_data = x$baseline_data[id %in% id_]
+    stage_data = object$stage_data[id %in% id_],
+    baseline_data = object$baseline_data[id %in% id_],
+    action_set = object$action_set,
+    stage_action_sets = object$stage_action_sets
   )
 
   return(spd)
 }
-
 
 #' Get the full history for a given stage
 #'
@@ -220,6 +462,7 @@ full_history <- function(object, stage){
   baseline_data <- getElement(object, "baseline_data")
   baseline_names <- getElement(object_colnames, "baseline_names")
   action_set <- get_action_set(object)
+  stage_action_sets <- get_stage_action_sets(object)
   deterministic_rewards <- getElement(object_colnames, "deterministic_rewards")
   stage_ <- stage; rm(stage)
 
@@ -265,6 +508,7 @@ full_history <- function(object, stage){
     action_name = action_name,
     deterministic_rewards = deterministic_rewards,
     action_set = action_set,
+    stage_action_set = stage_action_sets[[stage_]],
     stage = stage_
   )
   class(history) <- "history"
@@ -287,7 +531,8 @@ stage_state_history <- function(object, stage){
   state_names <- object$colnames$state_names
   baseline_data <- object$baseline_data
   baseline_names <- object$colnames$baseline_names
-  action_set <- object$action_set
+  action_set <- get_action_set(object)
+  stage_action_sets <- get_stage_action_sets(object)
   deterministic_rewards <- object$colnames$deterministic_rewards
   stage_ <- stage
 
@@ -326,6 +571,7 @@ stage_state_history <- function(object, stage){
     action_name = "A",
     deterministic_rewards = deterministic_rewards,
     action_set = action_set,
+    stage_action_set = stage_action_sets[[stage_]],
     stage = stage
   )
   class(history) <- "history"
@@ -423,7 +669,6 @@ NULL
 #' @examples
 #' library("polle")
 #' ### Single stage:
-#' source(system.file("sim", "single_stage.R", package="polle"))
 #' d1 <- sim_single_stage(5e2, seed=1)
 #' # constructing policy_data object:
 #' pd1 <- policy_data(d1, action="A", covariates=list("Z", "B", "L"), utility="U")
@@ -435,7 +680,6 @@ NULL
 #' head(h1$A)
 #'
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
 #' d2 <- sim_two_stage(5e2, seed=1)
 #' # constructing policy_data object:
 #' pd2 <- policy_data(d2,
@@ -462,7 +706,6 @@ NULL
 #' head(h2$A)
 #'
 #' ### Multiple stages
-#' source(system.file("sim", "multi_stage.R", package="polle"))
 #' d3 <- sim_multi_stage(5e2, seed = 1)
 #' # constructing policy_data object:
 #' pd3 <- policy_data(data = d3$stage_data,
@@ -487,6 +730,18 @@ get_history <- function(object, stage = NULL, full_history = FALSE)
 
 #' @export
 get_history.policy_data <- function(object, stage = NULL, full_history = FALSE){
+  # input checks:
+  if (!is.logical(full_history) | (length(full_history) != 1))
+    stop("full_history must be TRUE or FALSE")
+  if (!is.null(stage)){
+    if (!(is.numeric(stage) & (length(stage) == 1)))
+      stop("stage must be an integer greater than 0.")
+    if (!(stage %% 1 == 0))
+      stop("stage must be an integer greater than 0.")
+    if (stage<=0)
+      stop("stage must be an integer greater than 0.")
+  }
+
   if (full_history == TRUE){
     if (is.null(stage)) stop("Please provide a stage number.")
     his <- full_history(object, stage = stage)
@@ -512,7 +767,6 @@ get_history.policy_data <- function(object, stage = NULL, full_history = FALSE){
 #' @examples
 #' library("polle")
 #' ### Multiple stages:
-#' source(system.file("sim", "multi_stage.R", package="polle"))
 #' d3 <- sim_multi_stage(5e2, seed = 1)
 #' pd3 <- policy_data(data = d3$stage_data,
 #'                    baseline_data = d3$baseline_data,
@@ -554,19 +808,18 @@ get_history_names.policy_data <- function(object, stage = NULL){
 #' @returns [data.table] with key id and numeric variable U.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(5e2, seed=1)
+#' d <- sim_two_stage(5e2, seed=1)
 #' # constructing policy_data object:
-#' pd2 <- policy_data(d2,
+#' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   baseline = c("B"),
 #'                   covariates = list(L = c("L_1", "L_2"),
 #'                                     C = c("C_1", "C_2")),
 #'                   utility = c("U_1", "U_2", "U_3"))
-#' pd2
+#' pd
 #'
 #' # getting the utility:
-#' head(get_utility(pd2))
+#' head(get_utility(pd))
 #'@export
 get_utility <- function(object)
   UseMethod("get_utility")
@@ -593,19 +846,18 @@ get_rewards <- function(object){
 #' @returns [data.table] with keys id and stage and character variable A.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(5e2, seed=1)
+#' d <- sim_two_stage(5e2, seed=1)
 #' # constructing policy_data object:
-#' pd2 <- policy_data(d2,
+#' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   baseline = c("B"),
 #'                   covariates = list(L = c("L_1", "L_2"),
 #'                                     C = c("C_1", "C_2")),
 #'                   utility = c("U_1", "U_2", "U_3"))
-#' pd2
+#' pd
 #'
 #' # getting the actions:
-#' head(get_actions(pd2))
+#' head(get_actions(pd))
 #' @export
 get_actions <- function(object)
   UseMethod("get_actions")
@@ -625,19 +877,18 @@ get_actions.policy_data <- function(object){
 #' @returns Character vector.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(5e2, seed=1)
+#' d <- sim_two_stage(5e2, seed=1)
 #' # constructing policy_data object:
-#' pd2 <- policy_data(d2,
+#' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   baseline = c("B"),
 #'                   covariates = list(L = c("L_1", "L_2"),
 #'                                     C = c("C_1", "C_2")),
 #'                   utility = c("U_1", "U_2", "U_3"))
-#' pd2
+#' pd
 #'
 #' # getting the IDs:
-#' head(get_id(pd2))
+#' head(get_id(pd))
 #' @export
 get_id <- function(object)
   UseMethod("get_id")
@@ -655,19 +906,18 @@ get_id.policy_data <- function(object){
 #' @returns [data.table] with keys id and stage.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(5e2, seed=1)
+#' d <- sim_two_stage(5e2, seed=1)
 #' # constructing policy_data object:
-#' pd2 <- policy_data(d2,
+#' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   baseline = c("B"),
 #'                   covariates = list(L = c("L_1", "L_2"),
 #'                                     C = c("C_1", "C_2")),
 #'                   utility = c("U_1", "U_2", "U_3"))
-#' pd2
+#' pd
 #'
 #' # getting the IDs and stages:
-#' head(get_id_stage(pd2))
+#' head(get_id_stage(pd))
 #' @export
 get_id_stage <- function(object)
   UseMethod("get_id_stage")
@@ -689,7 +939,6 @@ get_id_stage.policy_data <- function(object){
 #' @param object Object of class [policy_data].
 #' @returns Integer.
 #' @examples
-#' source(system.file("sim", "multi_stage.R", package="polle"))
 #' d <- sim_multi_stage(5e2, seed = 1)
 #' pd <- policy_data(data = d$stage_data,
 #'                    baseline_data = d$baseline_data,
@@ -720,19 +969,18 @@ get_K.policy_data <- function(object){
 #' @returns Integer.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(5e2, seed=1)
+#' d <- sim_two_stage(5e2, seed=1)
 #' # constructing policy_data object:
-#' pd2 <- policy_data(d2,
+#' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   baseline = c("B"),
 #'                   covariates = list(L = c("L_1", "L_2"),
 #'                                     C = c("C_1", "C_2")),
 #'                   utility = c("U_1", "U_2", "U_3"))
-#' pd2
+#' pd
 #'
 #' # getting the number of observations:
-#' get_n(pd2)
+#' get_n(pd)
 #' @export
 get_n <- function(object)
   UseMethod("get_n")
@@ -751,19 +999,18 @@ get_n.policy_data <- function(object){
 #' @returns Character vector.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(5e2, seed=1)
+#' d <- sim_two_stage(5e2, seed=1)
 #' # constructing policy_data object:
-#' pd2 <- policy_data(d2,
+#' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   baseline = c("B"),
 #'                   covariates = list(L = c("L_1", "L_2"),
 #'                                     C = c("C_1", "C_2")),
 #'                   utility = c("U_1", "U_2", "U_3"))
-#' pd2
+#' pd
 #'
 #' # getting the actions set:
-#' get_action_set(pd2)
+#' get_action_set(pd)
 #' @export
 get_action_set <- function(object)
   UseMethod("get_action_set")
@@ -773,6 +1020,37 @@ get_action_set.policy_data <- function(object){
   action_set <- object$action_set
   return(action_set)
 }
+
+#' Get Stage Action Sets
+#'
+#' \code{get_stage_action_sets} returns the action sets at each stage, i.e.,
+#' the possible actions at each stage for the policy data object.
+#' @param object Object of class [policy_data].
+#' @returns List of character vectors.
+#' @examples
+#' ### Two stages:
+#' d <- sim_two_stage_multi_actions(5e2, seed=1)
+#' # constructing policy_data object:
+#' pd <- policy_data(d,
+#'                   action = c("A_1", "A_2"),
+#'                   baseline = c("B"),
+#'                   covariates = list(L = c("L_1", "L_2"),
+#'                                     C = c("C_1", "C_2")),
+#'                   utility = c("U_1", "U_2", "U_3"))
+#' pd
+#'
+#' # getting the stage actions set:
+#' get_stage_action_sets(pd)
+#' @export
+get_stage_action_sets <- function(object)
+  UseMethod("get_stage_action_sets")
+
+#' @export
+get_stage_action_sets.policy_data <- function(object){
+  stage_action_sets <- getElement(object, "stage_action_sets")
+  return(stage_action_sets)
+}
+
 
 
 

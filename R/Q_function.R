@@ -1,23 +1,21 @@
 fit_Q_function <- function(history, Q, q_model){
-
   action_set <- getElement(history, "action_set")
+  stage_action_set <- getElement(history, "stage_action_set")
+  stage <- getElement(history, "stage")
   deterministic_rewards <- getElement(history, "deterministic_rewards")
 
   # getting the action (A) and the model matrix (H):
   A <- get_A(history)
   H <- get_H(history)
-
   AH <- cbind(A, H)
 
-  # checking that all actions in the actions set occur:
-  if (!all(action_set == sort(unique(A)))){
-    mes <- "Not all actions occur at stage"
-    k <- getElement(history, "stage")
-    mes <- paste(mes, k)
+  # checking that all actions in the stage action set occur:
+  if (!all(stage_action_set == sort(unique(A)))){
+    mes <- "Not all stage actions occur at stage"
+    mes <- paste(mes, paste(stage, collapse = ", "))
     mes <- paste(mes, ". Unable to fit Q-function.", sep = "")
     stop(mes)
   }
-
 
   # getting the historic rewards
   U <- getElement(history, "U")
@@ -34,7 +32,10 @@ fit_Q_function <- function(history, Q, q_model){
 
   q_function <- list(
     q_model = q_model,
-    AH_names = colnames(AH)
+    AH_names = colnames(AH),
+    action_set = action_set,
+    stage_action_set = stage_action_set,
+    stage = stage
   )
   class(q_function) <- "Q_function"
 
@@ -49,29 +50,52 @@ print.Q_function <- function(x, ...){
   print(y)
 }
 
-evaluate.Q_function <- function(object, new_history){
+predict.Q_function <- function(object, new_history){
   q_model <- getElement(object, "q_model")
+  AH_names <- getElement(object, "AH_names")
+  # action set of the new history object
   action_set <- getElement(new_history, "action_set")
+  # stage action set of the fitted Q-function
+  stage_action_set <- getElement(object, "stage_action_set")
+  stage <- getElement(object, "stage")
+  # deterministic rewards of the new history object
   deterministic_rewards <- getElement(new_history, "deterministic_rewards")
 
   id_stage <- get_id_stage(new_history)
   new_H <- get_H(new_history)
 
+  # checks
+  if(!all(stage_action_set %in% action_set))
+    stop("The fitted stage action set is not a subset of the new action set.")
+  if (!all(names(new_H) %in% AH_names))
+    stop("new_history does not have the same column names as the original history.")
+
   # getting the historic rewards
   U <- new_history$U
 
-  # getting the residual predictions
+  # getting the residual predictions for the stage action set
   residual_q_predictions <- sapply(
-    action_set,
+    stage_action_set,
     function(a) predict(q_model, new_AH = cbind(A = a, new_H))
   )
-  # adding the historic utilities and deterministic rewards
-  q_values <- U$U_bar + U[, deterministic_rewards, with = FALSE] + residual_q_predictions
-  names(q_values) <- paste("Q", action_set, sep = "_")
+  tmp <- matrix(data = NA, nrow = nrow(id_stage), ncol = length(action_set))
+  colnames(tmp) <- action_set
+  tmp[, stage_action_set] <- residual_q_predictions
+  q_values <- tmp; rm(tmp)
 
-  if (!all(complete.cases(q_values))){
-    stage <- unique(id_stage$stage)
-    mes <- paste("Evaluation of the Q-function at stage ", stage, " have missing values.", sep = "")
+  # adding the historic utilities and deterministic rewards
+  q_values <- U$U_bar + U[, deterministic_rewards, with = FALSE] + q_values
+  colnames(q_values) <- paste("Q", action_set, sep = "_")
+
+  if (!all(complete.cases(q_values[, action_set %in% stage_action_set, with = FALSE]))){
+    if(!is.null(stage)){
+      mes <- paste("The Q-function predictions at stage ",
+                   stage,
+                   " have missing values.",
+                   sep = "")
+    } else {
+      mes <- "The Q-function predictions have missing values."
+    }
     stop(mes)
   }
 
@@ -93,7 +117,7 @@ q_step <- function(policy_data, k, full_history, Q, q_models){
   idx_k <- (id %in% id_k)
   rm(stage)
 
-  if (class(q_models)[[1]] == "list"){
+  if (is.list(q_models)){
     q_model <- q_models[[k]]
   } else{
     q_model <- q_models
@@ -104,7 +128,7 @@ q_step <- function(policy_data, k, full_history, Q, q_models){
   # fitting the Q-function:
   q_function <- fit_Q_function(q_history, Q = Q[idx_k], q_model = q_model)
   # getting the Q-function values for each action
-  q_values <- evaluate(q_function, new_history = q_history)
+  q_values <- predict(q_function, new_history = q_history)
 
   out <- list(
     q_function = q_function,
@@ -124,16 +148,16 @@ q_step_cf <- function(folds, policy_data, k, full_history, Q, q_models, future_a
   future_args <- append(future_args, list(X = folds,
                                           FUN = function(f){
                                             train_id <- id[-f]
-                                            train_policy_data <- subset(policy_data, train_id)
+                                            train_policy_data <- subset_id(policy_data, train_id)
                                             train_Q <- Q[-f]
                                             if (train_policy_data$dim$K != K) stop("The number of stages varies accross the training folds.")
                                             train_q_step <- q_step(train_policy_data, k = k, full_history = full_history, Q = train_Q, q_models = q_models)
                                             train_q_function <- train_q_step$q_function
 
                                             valid_id <- id[f]
-                                            valid_policy_data <- subset(policy_data, valid_id)
+                                            valid_policy_data <- subset_id(policy_data, valid_id)
                                             valid_history <- get_history(valid_policy_data, stage = k, full_history = full_history)
-                                            valid_values <- evaluate(train_q_function, valid_history)
+                                            valid_values <- predict(train_q_function, valid_history)
 
                                             out <- list(
                                               train_q_function = train_q_function,
@@ -169,9 +193,7 @@ q_step_cf <- function(folds, policy_data, k, full_history, Q, q_models, future_a
 #' @examples
 #' library("polle")
 #' ### Simulating two-stage policy data
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' par0 <- c(gamma = 0.5, beta = 1)
-#' d <- sim_two_stage(2e3, seed=1, par=par0)
+#' d <- sim_two_stage(2e3, seed=1)
 #' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   covariates = list(L = c("L_1", "L_2"),
@@ -196,9 +218,23 @@ fit_Q_functions <- function(policy_data,
   n <- get_n(policy_data)
   action_set <- get_action_set(policy_data)
 
-  # checking q_models: must either be a list of length K or a single Q-model
-  if (class(q_models)[[1]] == "list"){
-    if (length(q_models) != K) stop("q_models must either be a list of length K or a single Q-model.")
+  # input checks:
+  if (is.null(q_models))
+    stop("Please provide q_models.")
+
+  mes <- "q_models must be a single q_models or a list of K q_models's."
+  if (is.list(q_models)){
+    tmp <- all(unlist(lapply(q_models, function(gm) inherits(gm, "q_model"))))
+    if (!tmp)
+      stop(mes)
+    rm(tmp)
+    if (length(q_models) != K)
+      stop(mes)
+  } else{
+    if (!inherits(q_models, "q_model"))
+      stop(mes)
+    if (full_history == TRUE)
+      stop("full_history must be FALSE when a single q-model is provided.")
   }
 
   # getting the IDs:
@@ -237,8 +273,10 @@ fit_Q_functions <- function(policy_data,
     Q[idx_k, k] <- q_d_values_k
     Q[!idx_k, k] <- Q[!idx_k, k+1]
   }
+
+  # setting names, classes and attributes:
   names(q_functions) <- paste("stage_", 1:K, sep = "")
-  class(q_functions) <- "nuisance_functions"
+  class(q_functions) <- c("q_functions", "nuisance_functions")
   attr(q_functions, "full_history") <- full_history
 
   return(q_functions)
@@ -253,29 +291,28 @@ fit_Q_functions <- function(policy_data,
 #' @seealso [predict.nuisance_functions]
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(5e2, seed=1)
-#' pd2 <- policy_data(d2,
+#' d <- sim_two_stage(5e2, seed=1)
+#' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   baseline = c("B"),
 #'                   covariates = list(L = c("L_1", "L_2"),
 #'                                     C = c("C_1", "C_2")),
 #'                   utility = c("U_1", "U_2", "U_3"))
-#' pd2
+#' pd
 #'
 #' # evaluating the static policy a=1 using outcome regression
 #' # based on a GLM model at each stage.
-#' pe2 <- policy_eval(type = "or",
-#'                    policy_data = pd2,
-#'                    policy = policy_def(1, reuse = TRUE, name = "A=1"),
-#'                    q_models = list(q_glm(), q_glm()))
-#' pe2
+#' pe <- policy_eval(type = "or",
+#'                   policy_data = pd,
+#'                   policy = policy_def(1, reuse = TRUE, name = "A=1"),
+#'                   q_models = list(q_glm(), q_glm()))
+#' pe
 #'
 #' # getting the Q-functions
-#' q_functions <- get_q_functions(pe2)
+#' q_functions <- get_q_functions(pe)
 #'
 #' # getting the fitted g-function values
-#' head(predict(q_functions, pd2))
+#' head(predict(q_functions, pd))
 #' @export
 get_q_functions <- function(object)
   UseMethod("get_q_functions")

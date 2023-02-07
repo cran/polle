@@ -3,6 +3,7 @@
 \name{policy_data}
 \alias{policy_data}
 \alias{print.policy_data}
+\alias{summary.policy_data}
 \title{Create Policy Data Object}
 \usage{
 policy_data(
@@ -17,10 +18,13 @@ policy_data(
   id = NULL,
   stage = NULL,
   event = NULL,
+  action_set = NULL,
   verbose = FALSE
 )
 
 \method{print}{policy_data}(x, digits = 2, ...)
+
+\method{summary}{policy_data}(object, probs = seq(0, 1, 0.25), ...)
 }
 \arguments{
 \item{data}{\link{data.frame} or \link{data.table}; see Examples.}
@@ -61,6 +65,8 @@ The name of each element must be on the form "U_Aa" where "a" corresponds to an 
 
 \item{event}{Event indicator name.}
 
+\item{action_set}{Character string. Action set across all stages.}
+
 \item{verbose}{Logical. If TRUE, formatting comments are printed to the console.}
 
 \item{x}{Object to be printed.}
@@ -68,6 +74,10 @@ The name of each element must be on the form "U_Aa" where "a" corresponds to an 
 \item{digits}{Minimum number of digits to be printed.}
 
 \item{...}{Additional arguments passed to print.}
+
+\item{object}{Object of class \link{policy_data}}
+
+\item{probs}{numeric vector (probabilities)}
 }
 \value{
 \code{policy_data()} returns an object of class "policy_data".
@@ -82,7 +92,9 @@ covariates (\eqn{B}).}
 covariate names, and the deterministic reward variable
 names.}
 \item{\code{action_set}}{Sorted character vector describing the action set, i.e.,
-the possible actions at each stage.}
+the possible actions at all stages.}
+\item{\code{stage_action_sets}}{List of sorted character vectors describing
+the observed actions at each stage.}
 \item{\code{dim}}{List containing the number of observations (n) and the
 number of stages (K).}
 }
@@ -111,20 +123,20 @@ class \code{policy_data}:
 \itemize{
 \item{\code{\link[=partial]{partial()}}}{ Trim the maximum number
 of stages in a \code{policy_data} object.}
-\item{\code{\link[=subset.policy_data]{subset.policy_data()}}}{ Subset a a \code{policy_data} object on ID.}
+\item{\code{\link[=subset_id]{subset_id()}}}{ Subset a a \code{policy_data} object on ID.}
 \item{\code{\link[=get_history]{get_history()}}}{ Summarize the history and action at
 a given stage.}
 \item{\code{\link[=get_history_names]{get_history_names()}}}{ Get history variable names.}
 \item{\code{\link[=get_actions]{get_actions()}}}{ Get the action at every stage.}
 \item{\code{\link[=get_utility]{get_utility()}}}{Get the utility.}
+\item{\code{\link[=plot]{plot()}}}{Plot method.}
 }
 }
 
 \examples{
 library("polle")
 ### Single stage: Wide data
-source(system.file("sim", "single_stage.R", package="polle"))
-d1 <- sim_single_stage(5e2, seed=1)
+d1 <- sim_single_stage(n = 5e2, seed=1)
 head(d1, 5)
 # constructing policy_data object:
 pd1 <- policy_data(d1,
@@ -139,7 +151,6 @@ head(get_utility(pd1), 5)
 head(get_history(pd1)$H, 5)
 
 ### Two stage: Wide data
-source(system.file("sim", "two_stage.R", package="polle"))
 d2 <- sim_two_stage(5e2, seed=1)
 head(d2, 5)
 # constructing policy_data object:
@@ -154,7 +165,6 @@ head(get_history(pd2, stage = 2)$H, 5) # state/Markov type history and action, (
 head(get_history(pd2, stage = 2, full_history = TRUE)$H, 5) # Full history and action, (H_k,A_k).
 
 ### Multiple stages: Long data
-source(system.file("sim", "multi_stage.R", package="polle"))
 d3 <- sim_multi_stage(5e2, seed = 1)
 head(d3$stage_data, 10)
 # constructing policy_data object:

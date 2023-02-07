@@ -3,13 +3,22 @@
 \docType{class}
 \name{g_model}
 \alias{g_model}
+\alias{g_empir}
 \alias{g_glm}
 \alias{g_glmnet}
 \alias{g_rf}
 \alias{g_sl}
 \title{g_model class object}
 \usage{
-g_glm(formula = ~., family = "binomial", model = FALSE, ...)
+g_empir(formula = ~1, ...)
+
+g_glm(
+  formula = ~.,
+  family = "binomial",
+  model = FALSE,
+  na.action = na.pass,
+  ...
+)
 
 g_glmnet(formula = ~., family = "binomial", alpha = 1, s = "lambda.min", ...)
 
@@ -25,13 +34,18 @@ g_sl(
   formula = ~.,
   SL.library = c("SL.mean", "SL.glm"),
   family = binomial(),
+  env = as.environment("package:SuperLearner"),
+  onlySL = TRUE,
   ...
 )
 }
 \arguments{
 \item{formula}{An object of class \link{formula} specifying the design matrix for
-the propensity model/g-model. Use \code{\link[=get_history_names]{get_history_names()}} to se the available
+the propensity model/g-model. Use \code{\link[=get_history_names]{get_history_names()}} to view the available
 variable names.}
+
+\item{...}{Additional arguments passed to \code{\link[=glm]{glm()}}, \link[glmnet:glmnet]{glmnet::glmnet},
+\link[ranger:ranger]{ranger::ranger} or \link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner}.}
 
 \item{family}{A description of the error distribution and link function to
 be used in the model.}
@@ -39,10 +53,10 @@ be used in the model.}
 \item{model}{(Only used by \code{g_glm}) If \code{FALSE} model frame will
 not be saved.}
 
-\item{...}{Additional arguments passed to \code{\link[=glm]{glm()}}, \link[glmnet:glmnet]{glmnet::glmnet},
-\link[ranger:ranger]{ranger::ranger} or \link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner}.}
+\item{na.action}{(Only used by \code{g_glm}) A function which indicates what
+should happen when the data contain NAs, see \link{na.pass}.}
 
-\item{alpha}{(Only used by \code{g_glmnet}) The elasticnet mixing parameter
+\item{alpha}{(Only used by \code{g_glmnet}) The elastic net mixing parameter
 between 0 and 1. alpha equal to 1 is the lasso penalty, and alpha equal
 to 0 the ridge penalty.}
 
@@ -61,18 +75,25 @@ of folds and
 
 \item{SL.library}{(Only used by \code{g_sl}) Either a character vector of prediction algorithms or
 a list containing character vectors, see \link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner}.}
+
+\item{env}{(Only used by \code{g_sl}) Environment containing the learner functions. Defaults to the calling environment.}
+
+\item{onlySL}{(Only used by \code{g_sl}) Logical. If TRUE, only saves and computes predictions
+for algorithms with non-zero coefficients in the super learner object.}
 }
 \value{
 g-model object: function with arguments 'A'
 (action vector), 'H' (history matrix) and 'action_set'.
 }
 \description{
-Use \code{g_glm()}, \code{g_glmnet()}, \code{g_rf()}, and \code{g_sl()} to construct
+Use \code{g_glm()}, \code{g_empir()}, \code{g_glmnet()}, \code{g_rf()}, and \code{g_sl()} to construct
 an action probability model/g-model object.
 The constructors are used as input for \code{\link[=policy_eval]{policy_eval()}} and \code{\link[=policy_learn]{policy_learn()}}.
 }
 \details{
 \code{g_glm()} is a wrapper of \code{\link[=glm]{glm()}} (generalized linear model).\cr
+\code{g_empir()} calculates the empirical probabilities within the groups
+defined by the formula.\cr
 \code{g_glmnet()} is a wrapper of \code{\link[glmnet:glmnet]{glmnet::glmnet()}} (generalized linear model via
 penalized maximum likelihood).\cr
 \code{g_rf()} is a wrapper of \code{\link[ranger:ranger]{ranger::ranger()}} (random forest).
@@ -83,44 +104,43 @@ model with the lowest cross-validation error is selected.\cr
 \examples{
 library("polle")
 ### Two stages:
-source(system.file("sim", "two_stage.R", package="polle"))
-d2 <- sim_two_stage(2e2, seed=1)
-pd2 <- policy_data(d2,
+d <- sim_two_stage(2e2, seed=1)
+pd <- policy_data(d,
                   action = c("A_1", "A_2"),
                   baseline = c("B"),
                   covariates = list(L = c("L_1", "L_2"),
                                     C = c("C_1", "C_2")),
                   utility = c("U_1", "U_2", "U_3"))
-pd2
+pd
 
 # available state history variable names:
-get_history_names(pd2)
+get_history_names(pd)
 # defining a g-model:
 g_model <- g_glm(formula = ~B+C)
 
 # evaluating the static policy (A=1) using inverse propensity weighting
 # based on a state glm model across all stages:
-pe2 <- policy_eval(type = "ipw",
-                   policy_data = pd2,
-                   policy = policy_def(1, reuse = TRUE),
-                   g_models = g_model)
+pe <- policy_eval(type = "ipw",
+                  policy_data = pd,
+                  policy = policy_def(1, reuse = TRUE),
+                 g_models = g_model)
 # inspecting the fitted g-model:
-get_g_functions(pe2)
+get_g_functions(pe)
 
 # available full history variable names at each stage:
-get_history_names(pd2, stage = 1)
-get_history_names(pd2, stage = 2)
+get_history_names(pd, stage = 1)
+get_history_names(pd, stage = 2)
 
 # evaluating the same policy based on a full history
 # glm model for each stage:
-pe2 <- policy_eval(type = "ipw",
-                   policy_data = pd2,
+pe <- policy_eval(type = "ipw",
+                   policy_data = pd,
                    policy = policy_def(1, reuse = TRUE),
                    g_models = list(g_glm(~ L_1 + B),
                                    g_glm(~ A_1 + L_2 + B)),
                    g_full_history = TRUE)
 # inspecting the fitted g-models:
-get_g_functions(pe2)
+get_g_functions(pe)
 }
 \seealso{
 \code{\link[=get_history_names]{get_history_names()}}, \code{\link[=get_g_functions]{get_g_functions()}}.

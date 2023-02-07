@@ -1,5 +1,7 @@
 check_g_formula <- function(formula, data){
   tt <- terms(formula, data = data)
+  if (length(attr(tt, "term.labels")) == 0)
+    return(NULL)
   formula <- reformulate(attr(tt, "term.labels"), response = NULL)
   tt <- terms(formula, data = data)
   v <- all.vars(tt)
@@ -28,7 +30,22 @@ update_g_formula <- function(formula, A, H) {
   environment(formula)$AA <- AA
   attr(formula, "action_set") <- action_set
   attr(formula, "response") <- "AA"
+
   return(formula)
+}
+
+check_missing_regressor <- function(formula, data){
+  data <- as.data.table(data)
+  tt <- terms(formula, data = data)
+  tt <- terms(reformulate(attr(tt, "term.labels"), response = NULL),
+              data = data)
+  v <- all.vars(tt)
+  cols_na <- names(which(colSums(is.na(data[,v, with = FALSE])) > 0))
+  if (length(cols_na) > 0){
+    mes <- paste(cols_na, collapse = ", ")
+    mes <- paste("The regression variables ", mes, " have missing NA values.", sep = "")
+    warning(mes)
+  }
 }
 
 get_response <- function(formula, ...) {
@@ -40,35 +57,66 @@ get_response <- function(formula, ...) {
   return(y)
 }
 
-get_design <- function(formula, data, intercept=FALSE) {
+get_design <- function(formula, data) {
   tt <- terms(formula, data=data)
-  if (!intercept)
-    attr(tt, "intercept") <- 0
+  attr(tt, "intercept") <- 1
   tt <- delete.response(tt)
-  mf <- model.frame(tt, data=data)
-  x_levels <- .getXlevels(tt, mf)
+  op <- options(na.action = "na.pass")
+  mf <- model.frame(tt, data=data, drop.unused.levels = TRUE)
+  xlevels <- .getXlevels(tt, mf)
   x <- model.matrix(mf, data=data)
+  options(op)
+  idx_inter <- which(colnames(x) == "(Intercept)")
+  if (length(idx_inter)>0)
+    x <- x[,-idx_inter, drop = FALSE]
   attr(tt, ".Environment") <- NULL
-  return(list(terms=tt, x_levels=x_levels, x=x))
+  colnames(x) <- gsub("[^[:alnum:]]", "_", colnames(x))
+  return(list(terms=tt, xlevels=xlevels, x=x))
 }
 
+apply_design <- function(design, data){
+  terms <- getElement(design, "terms")
+  xlevels <- getElement(design, "xlevels")
+
+  op <- options(na.action = "na.pass")
+  mf <- model.frame(terms,
+                    data=data,
+                    xlev = xlevels,
+                    drop.unused.levels=FALSE)
+  newx <- model.matrix(mf, data=data, xlev = xlevels)
+  options(op)
+
+  idx_inter <- which(colnames(newx) == "(Intercept)")
+  if (length(idx_inter)>0)
+    newx <- newx[,-idx_inter, drop = FALSE]
+
+  colnames(newx) <- gsub("[^[:alnum:]]", "_", colnames(newx))
+  return(newx)
+}
+
+new_g_model <- function(g_model){
+  class(g_model) <- c("g_model", "function")
+  return(g_model)
+}
 
 # g_model documentation -----------------------------------------------------------
 
 #' @title g_model class object
 #'
-#' @description  Use \code{g_glm()}, \code{g_glmnet()}, \code{g_rf()}, and \code{g_sl()} to construct
+#' @description  Use \code{g_glm()}, \code{g_empir()}, \code{g_glmnet()}, \code{g_rf()}, and \code{g_sl()} to construct
 #' an action probability model/g-model object.
 #' The constructors are used as input for [policy_eval()] and [policy_learn()].
 #'
 #' @param formula An object of class [formula] specifying the design matrix for
-#' the propensity model/g-model. Use [get_history_names()] to se the available
+#' the propensity model/g-model. Use [get_history_names()] to view the available
 #' variable names.
 #' @param family A description of the error distribution and link function to
 #' be used in the model.
 #' @param model (Only used by \code{g_glm}) If \code{FALSE} model frame will
 #' not be saved.
-#' @param alpha (Only used by \code{g_glmnet}) The elasticnet mixing parameter
+#' @param na.action (Only used by \code{g_glm}) A function which indicates what
+#' should happen when the data contain NAs, see [na.pass].
+#' @param alpha (Only used by \code{g_glmnet}) The elastic net mixing parameter
 #' between 0 and 1. alpha equal to 1 is the lasso penalty, and alpha equal
 #' to 0 the ridge penalty.
 #' @param s (Only used by \code{g_glmnet}) Value(s) of the penalty parameter
@@ -82,10 +130,15 @@ get_design <- function(formula, data, intercept=FALSE) {
 #' \code{rep} is the number of replications.
 #' @param SL.library (Only used by \code{g_sl}) Either a character vector of prediction algorithms or
 #' a list containing character vectors, see [SuperLearner::SuperLearner].
+#' @param env (Only used by \code{g_sl}) Environment containing the learner functions. Defaults to the calling environment.
+#' @param onlySL (Only used by \code{g_sl}) Logical. If TRUE, only saves and computes predictions
+#' for algorithms with non-zero coefficients in the super learner object.
 #' @param ... Additional arguments passed to [glm()], [glmnet::glmnet],
 #' [ranger::ranger] or [SuperLearner::SuperLearner].
 #' @details
 #' \code{g_glm()} is a wrapper of [glm()] (generalized linear model).\cr
+#' \code{g_empir()} calculates the empirical probabilities within the groups
+#' defined by the formula.\cr
 #' \code{g_glmnet()} is a wrapper of [glmnet::glmnet()] (generalized linear model via
 #' penalized maximum likelihood).\cr
 #' \code{g_rf()} is a wrapper of [ranger::ranger()] (random forest).
@@ -100,45 +153,110 @@ get_design <- function(formula, data, intercept=FALSE) {
 #' @examples
 #' library("polle")
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(2e2, seed=1)
-#' pd2 <- policy_data(d2,
+#' d <- sim_two_stage(2e2, seed=1)
+#' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
 #'                   baseline = c("B"),
 #'                   covariates = list(L = c("L_1", "L_2"),
 #'                                     C = c("C_1", "C_2")),
 #'                   utility = c("U_1", "U_2", "U_3"))
-#' pd2
+#' pd
 #'
 #' # available state history variable names:
-#' get_history_names(pd2)
+#' get_history_names(pd)
 #' # defining a g-model:
 #' g_model <- g_glm(formula = ~B+C)
 #'
 #' # evaluating the static policy (A=1) using inverse propensity weighting
 #' # based on a state glm model across all stages:
-#' pe2 <- policy_eval(type = "ipw",
-#'                    policy_data = pd2,
-#'                    policy = policy_def(1, reuse = TRUE),
-#'                    g_models = g_model)
+#' pe <- policy_eval(type = "ipw",
+#'                   policy_data = pd,
+#'                   policy = policy_def(1, reuse = TRUE),
+#'                  g_models = g_model)
 #' # inspecting the fitted g-model:
-#' get_g_functions(pe2)
+#' get_g_functions(pe)
 #'
 #' # available full history variable names at each stage:
-#' get_history_names(pd2, stage = 1)
-#' get_history_names(pd2, stage = 2)
+#' get_history_names(pd, stage = 1)
+#' get_history_names(pd, stage = 2)
 #'
 #' # evaluating the same policy based on a full history
 #' # glm model for each stage:
-#' pe2 <- policy_eval(type = "ipw",
-#'                    policy_data = pd2,
+#' pe <- policy_eval(type = "ipw",
+#'                    policy_data = pd,
 #'                    policy = policy_def(1, reuse = TRUE),
 #'                    g_models = list(g_glm(~ L_1 + B),
 #'                                    g_glm(~ A_1 + L_2 + B)),
 #'                    g_full_history = TRUE)
 #' # inspecting the fitted g-models:
-#' get_g_functions(pe2)
+#' get_g_functions(pe)
 NULL
+
+
+# empirical (group) probability -------------------------------------------
+
+calculate_prop_table <- function(data, formula){
+  tt <- terms(formula, data = data)
+  # grouping variables:
+  v <- all.vars(tt)
+  N_ <- N_group_ <- empir_prob <- A <-  NULL
+  tab <- data[ , list(N_ = .N), by = c("A", v)]
+  tab[, N_group_ := sum(N_), by = v]
+  tab <- tab[, empir_prob := N_ / N_group_][order(A), ]
+  tab[, c("N_","N_group_") := NULL]
+
+  return(list(tab=tab, v=v))
+}
+
+#' @rdname g_model
+#' @export
+g_empir <- function(formula = ~1, ...) {
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
+
+  g_empir <- function(A, H, action_set){
+    check_g_formula(formula = formula, data = H)
+    data <- cbind(A, H)
+    tmp <- calculate_prop_table(data, formula = formula)
+    tab <- tmp[["tab"]]
+    v <- tmp[["v"]]
+    out <- list(tab=tab, action_set=action_set, v=v)
+    class(out) <- c("g_empir")
+    return(out)
+  }
+  # setting class:
+  g_empir <- new_g_model(g_empir)
+  return(g_empir)
+}
+predict.g_empir <- function(object, new_H){
+  tab <- object[["tab"]]
+  action_set <- object[["action_set"]]
+  v <- object[["v"]]
+
+  if (length(v) == 0){
+    A <- NULL
+    probs <- tab[order(A),]$empir_prob
+    probs <- matrix(probs,
+                    nrow = nrow(new_H),
+                    ncol = length(action_set),
+                    byrow = TRUE)
+  } else{
+    probs <- matrix(0,
+                    nrow = nrow(new_H),
+                    ncol = length(action_set),
+                    byrow = TRUE)
+    new_H <- cbind(id = 1:nrow(new_H), new_H)
+    for (j in seq_along(action_set)){
+      A_ <- action_set[j]
+      id <- A <- NULL
+      tmp <- merge(new_H, tab[A == A_,], all.x = TRUE)[order(id)]
+      tmp[is.na(tmp)] <- 0
+      probs[,j] <- tmp[["empir_prob"]]
+    }
+  }
+
+  return(probs)
+}
 
 # glm interface --------------------------------------
 
@@ -147,28 +265,39 @@ NULL
 g_glm <- function(formula = ~.,
                   family = "binomial",
                   model = FALSE,
+                  na.action = na.pass,
                   ...) {
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
   dotdotdot <- list(...)
-  force(formula)
+
   g_glm <- function(A, H, action_set){
     check_g_formula(formula = formula, data = H)
     formula <- update_g_formula(formula, A, H)
-    args_glm <- append(list(formula = formula, data = H,
-                            family = family, model = model), dotdotdot)
 
-    glm_model <- do.call(what = "glm", args = args_glm)
-    glm_model$call <- NULL
+    args_glm <- append(list(formula = formula,
+                            data = H,
+                            family = family,
+                            model = model,
+                            na.action = na.action),
+                       dotdotdot)
 
-    m <- list(glm_model = glm_model)
+    model <- do.call(what = "glm", args = args_glm)
+    model$call <- NULL
+
+    m <- list(model = model)
     class(m) <- c("g_glm")
     return(m)
   }
-  class(g_glm) <- c("g_model", "function")
+
+  # setting class:
+  g_glm <- new_g_model(g_glm)
+
   return(g_glm)
 }
 predict.g_glm <- function(object, new_H){
-  glm_model <- getElement(object, "glm_model")
-  fit <- predict.glm(object = glm_model, newdata = new_H, type = "response")
+  model <- getElement(object, "model")
+  fit <- predict.glm(object = model, newdata = new_H, type = "response")
   probs <- cbind((1-fit), fit)
   return(probs)
 }
@@ -183,12 +312,13 @@ g_glmnet <- function(formula = ~.,
                      alpha = 1,
                      s = "lambda.min", ...) {
   if (!requireNamespace("glmnet")) stop("Package 'glmnet' required")
-  force(formula)
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
   dotdotdot <- list(...)
   g_glmnet <- function(A, H, action_set){
     check_g_formula(formula = formula, data = H)
+    check_missing_regressor(formula = formula, data = H)
     formula <- update_g_formula(formula, A, H)
-    ##action_set <- attr(formula, "action_set")
     y <- get_response(formula, data=H)
     des <- get_design(formula, data=H)
     if (ncol(des$x)<2)
@@ -196,27 +326,30 @@ g_glmnet <- function(formula = ~.,
 
     args_glmnet <- list(y = y,  x = des$x, family = family, alpha = alpha)
     args_glmnet <- append(args_glmnet, dotdotdot)
-    glmnet_model <- do.call(glmnet::cv.glmnet, args = args_glmnet)
-    glmnet_model$call <- NULL
+    model <- do.call(glmnet::cv.glmnet, args = args_glmnet)
+    model$call <- NULL
 
-    m <- with(des, list(glmnet_model = glmnet_model,
-                        s = s,
-                        xlevels = x_levels,
-                        terms = terms,
-                        action_set = action_set))
+    des$x <- NULL
+    m  <- list(model = model,
+               s = s,
+               design = des,
+               action_set = action_set)
     class(m) <- c("g_glmnet")
     return(m)
   }
-  class(g_glmnet) <- c("g_model", "function")
+  # setting class:
+  g_glmnet <- new_g_model(g_glmnet)
+
   return(g_glmnet)
 }
 
 predict.g_glmnet <- function(object, new_H) {
-  glmnet_model <- object$glmnet_model
-  mf <- with(object, model.frame(terms, data=new_H, xlev = xlevels,
-                                 drop.unused.levels=FALSE))
-  newx <- model.matrix(mf, data=new_H, xlev = object$xlevels)
-  fit <- predict(glmnet_model,  newx = newx, type = "response", s = object$s)
+  design <- getElement(object, "design")
+  model <- getElement(object, "model")
+  s <- getElement(object, "s")
+
+  newx <- apply_design(design, data = new_H)
+  fit <- predict(model,  newx = newx, type = "response", s = s)
   probs <- cbind((1-fit), fit)
   return(probs)
 }
@@ -237,7 +370,8 @@ g_rf <- function(formula = ~.,
                  cv_args=list(K=5, rep=1),
                  ...) {
   if (!requireNamespace("ranger")) stop("Package 'ranger' required")
-  force(formula)
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
   dotdotdot <- list(...)
   hyper_par <- expand.list(num.trees=num.trees, mtry=mtry)
   rf_args <- function(p) {
@@ -264,29 +398,33 @@ g_rf <- function(formula = ~.,
       best <- if (is.null(res)) 1 else which.min(summary(res))
     }
     if (!is.null(res)) {
-      fit <- res$fit[[best]]
+      model <- res$fit[[best]]
     } else {
-      fit <- ml[[best]](data)
+      model <- ml[[best]](data)
     }
-    fit$call <- NULL
-    m <- with(des, list(fit = fit,
-                        rf_args = rf_args(hyper_par[[best]]),
-                        num.trees=num.trees[best],
-                        xlevels = x_levels,
-                        terms = terms,
-                        action_set = action_set))
+    model$call <- NULL
+
+    des$x <- NULL
+    m <- list(model = model,
+              rf_args = rf_args(hyper_par[[best]]),
+              num.trees=num.trees[best],
+              design = des,
+              action_set = action_set)
     class(m) <- c("g_rf")
     return(m)
   }
-  class(g_rf) <- c("g_model", "function")
+  # setting class:
+  g_rf <- new_g_model(g_rf)
+
   return(g_rf)
 }
 
-predict.g_rf <- function(object, new_H, ...) {
-  mf <- with(object, model.frame(terms, data=new_H, xlev = xlevels,
-                                 drop.unused.levels=FALSE))
-  newx <- model.matrix(mf, data=new_H, xlev = object$xlevels)
-  pr <- predict(object$fit, data=newx, num.threads=1)$predictions
+predict.g_rf <- function(object, new_H, ...){
+  model <- getElement(object, "model")
+  design <- getElement(object, "design")
+
+  new_data <- apply_design(design = design, data = new_H)
+  pr <- predict(model, data=new_data, num.threads=1)$predictions
   return(pr)
 }
 
@@ -297,46 +435,63 @@ predict.g_rf <- function(object, new_H, ...) {
 g_sl <- function(formula = ~ .,
                  SL.library=c("SL.mean", "SL.glm"),
                  family=binomial(),
+                 env = as.environment("package:SuperLearner"),
+                 onlySL = TRUE,
                  ...) {
   if (!requireNamespace("SuperLearner"))
     stop("Package 'SuperLearner' required.")
-  force(formula)
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
   force(SL.library)
+  force(env)
   dotdotdot <- list(...)
   g_sl <- function(A, H, action_set) {
     A <- as.numeric(factor(A, levels=action_set))-1
     check_g_formula(formula = formula, data = H)
     des <- get_design(formula, data=H)
-    X <- data.frame(des$x)
-    colnames(X) <- gsub("[^[:alnum:]]", "_", colnames(X))
-    sl_args <- append(list(Y=A, X=X, family=family, SL.library=SL.library),
+    sl_args <- append(list(Y=A,
+                           X=as.data.frame(des$x),
+                           family=family,
+                           SL.library=SL.library,
+                           env = env),
                       dotdotdot)
-    fit <- do.call(SuperLearner::SuperLearner, sl_args)
-    m <- with(des, list(fit = fit,
-                        xlevels = x_levels,
-                        terms = terms,
-                        action_set = action_set))
+    model <- do.call(SuperLearner::SuperLearner, sl_args)
+    model$call <- NULL
+    if(onlySL == TRUE){
+      model$fitLibrary[model$coef == 0] <- NA
+    }
+
+    des$x <- NULL
+    m <- list(model = model,
+              design = des,
+              onlySL = onlySL,
+              action_set = action_set)
+
     class(m) <- c("g_sl")
     return(m)
   }
-  class(g_sl) <- c("g_model", "function")
+  # setting class:
+  g_sl <- new_g_model(g_sl)
+
   return(g_sl)
 }
 
 #' @export
 predict.g_sl <- function(object, new_H, ...) {
-  mf <- with(object, model.frame(terms, data=new_H, xlev = xlevels,
-                                 drop.unused.levels=FALSE))
-  newx <- as.data.frame(model.matrix(mf, data=new_H, xlev = object$xlevels))
-  colnames(newx) <- gsub("[^[:alnum:]]", "_", colnames(newx))
-  pr <- predict(object$fit, newdata=newx)$pred
+  model <- getElement(object, "model")
+  design <- getElement(object, "design")
+  onlySL <- getElement(object, "onlySL")
+
+  newdata <- apply_design(design = design, data = new_H)
+  newdata <- as.data.frame(newdata)
+  pr <- predict(model,
+                newdata=newdata,
+                onlySL = onlySL)$pred
   pr <- cbind((1-pr), pr)
   return(pr)
 }
 
-################################################################################
-## sl3 (SuperLearner) interface
-################################################################################
+## sl3 (SuperLearner) interface ----
 
 # g_sl3 <- function(formula = ~ ., learner, folds=5, ...) {
 #   if (!requireNamespace("sl3"))
@@ -364,7 +519,7 @@ predict.g_sl <- function(object, new_H, ...) {
 #                               folds=folds)
 #     fit <- learner$train(tsk)
 #     m <- with(des, list(fit = fit,
-#                         xlevels = x_levels,
+#                         xlevels = xlevels,
 #                         terms = terms,
 #                         action_set = action_set))
 #     class(m) <- c("g_sl3")

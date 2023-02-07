@@ -1,13 +1,30 @@
 check_q_formula <- function(formula, data){
   tt <- terms(formula, data = data)
-  formula <- reformulate(attr(tt, "term.labels"), response = NULL)
-  tt <- terms(formula, data = data)
-  v <- all.vars(tt)
-  if(!all(v %in% colnames(data))){
-    mes <- deparse(formula)
-    mes <- paste("The Q-model formula", mes, "is invalid.")
-    stop(mes)
+  if (length(attr(tt, "term.labels"))>0){
+    formula <- reformulate(attr(tt, "term.labels"), response = NULL)
+    tt <- terms(formula, data = data)
+    v <- all.vars(tt)
+    if(!all(v %in% colnames(data))){
+      mes <- deparse(formula)
+      mes <- paste("The Q-model formula", mes, "is invalid.")
+      stop(mes)
+    }
   }
+}
+
+update_q_formula <- function(formula, data, V_res){
+  tt <- terms(formula, data = data)
+  if (length(attr(tt, "term.labels")) == 0)
+    formula <- V_res ~ 1
+  else
+    formula <- reformulate(attr(tt, "term.labels"), response = "V_res")
+
+  return(formula)
+}
+
+new_q_model <- function(q_model){
+  class(q_model) <- c("q_model", "function")
+  return(q_model)
 }
 
 # Q-model documentation ---------------------------------------------------
@@ -27,6 +44,8 @@ check_q_formula <- function(formula, data){
 #' be used in the model.
 #' @param model (Only used by \code{q_glm}) If \code{FALSE} model frame will
 #' not be saved.
+#' @param na.action (Only used by \code{q_glm}) A function which indicates what
+#' should happen when the data contain NAs, see [na.pass].
 #' @param alpha (Only used by \code{q_glmnet}) The elasticnet mixing parameter
 #' between 0 and 1. alpha equal to 1 is the lasso penalty, and alpha equal
 #' to 0 the ridge penalty.
@@ -42,6 +61,10 @@ check_q_formula <- function(formula, data){
 #' @param SL.library (Only used by \code{q_sl}) Either a character vector of
 #' prediction algorithms or a list containing character vectors,
 #' see [SuperLearner::SuperLearner].
+#' @param env (Only used by \code{q_sl}) Environment containing the learner
+#' functions. Defaults to the calling environment.
+#' @param onlySL (Only used by \code{q_sl}) Logical. If TRUE, only saves and computes predictions
+#' for algorithms with non-zero coefficients in the super learner object.
 #' @param ... Additional arguments passed to [glm()], [glmnet::glmnet],
 #' [ranger::ranger] or [SuperLearner::SuperLearner].
 #' @details
@@ -61,32 +84,29 @@ check_q_formula <- function(formula, data){
 #' @examples
 #' library("polle")
 #' ### Single stage case
-#' source(system.file("sim", "single_stage.R", package="polle"))
-#' d <- sim_single_stage(5e2, seed=1)
-#' pd <- policy_data(d,
-#'                   action="A",
-#'                   covariates=list("Z", "B", "L"),
-#'                   utility="U")
-#' pd
+#' d1 <- sim_single_stage(5e2, seed=1)
+#' pd1 <- policy_data(d1,
+#'                    action="A",
+#'                    covariates=list("Z", "B", "L"),
+#'                    utility="U")
+#' pd1
 #'
 #' # available history variable names for the outcome regression:
-#' get_history_names(pd)
+#' get_history_names(pd1)
 #'
 #' # evaluating the static policy a=1 using inverse
 #' # propensity weighting based on the given Q-model:
-#' pe <- policy_eval(type = "or",
-#'             policy_data = pd,
-#'             policy = policy_def(1, name = "A=1"),
-#'             q_model = q_glm(formula = ~A*.))
-#' pe
+#' pe1 <- policy_eval(type = "or",
+#'                    policy_data = pd1,
+#'                    policy = policy_def(1, name = "A=1"),
+#'                    q_model = q_glm(formula = ~A*.))
+#' pe1
 #'
 #' # getting the fitted Q-function values
-#' head(predict(get_q_functions(pe), pd))
+#' head(predict(get_q_functions(pe1), pd1))
 #'
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' par0 <- c(gamma = 0.5, beta = 1)
-#' d2 <- sim_two_stage(5e2, seed=1, par=par0); rm(par0)
+#' d2 <- sim_two_stage(5e2, seed=1)
 #' pd2 <- policy_data(d2,
 #'                   action = c("A_1", "A_2"),
 #'                   covariates = list(L = c("L_1", "L_2"),
@@ -116,45 +136,43 @@ NULL
 
 #' @rdname q_model
 #' @export
-q_glm <- function(formula = ~ A * .,
+q_glm <- function(formula = ~ A*.,
                   family = gaussian(),
                   model = FALSE,
-                  ...) {
-  force(formula)
+                  na.action = na.pass,
+                  ...){
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
   dotdotdot <- list(...)
 
   q_glm <- function(AH, V_res) {
     data <- AH
     check_q_formula(formula = formula, data = data)
-    tt <- terms(formula, data = data)
-    if (length(attr(tt, "term.labels")) == 0)
-      formula <- V_res ~ 1
-    else
-      formula <- reformulate(attr(tt, "term.labels"), response = "V_res")
+    formula <- update_q_formula(formula = formula, data = data, V_res = V_res)
 
     args_glm <- list(
       formula = formula,
       data = data,
       family = family,
-      model = model
+      model = model,
+      na.action = na.action
     )
     args_glm <- append(args_glm, dotdotdot)
+    model <- do.call(what = "glm", args = args_glm)
+    model$call <- NULL
 
-    glm_model <- do.call(what = "glm", args = args_glm)
-    glm_model$call <- NULL
-
-    m <- list(glm_model = glm_model)
+    m <- list(model = model)
 
     class(m) <- c("q_glm")
     return(m)
   }
-  class(q_glm) <- c("q_model")
+  q_glm <- new_q_model(q_glm)
   return(q_glm)
 }
 
 predict.q_glm <- function(object, new_AH){
-  glm_model <- getElement(object, "glm_model")
-  pred <- predict(object$glm_model, newdata = new_AH, type = "response")
+  model <- getElement(object, "model")
+  pred <- predict(model, newdata = new_AH, type = "response")
   return(pred)
 }
 
@@ -162,45 +180,49 @@ predict.q_glm <- function(object, new_AH){
 
 #' @rdname q_model
 #' @export
-q_glmnet <- function(formula = ~ A * .,
+q_glmnet <- function(formula = ~ A*.,
                      family = "gaussian",
                      alpha = 1,
                      s = "lambda.min",
                      ...) {
   if (!requireNamespace("glmnet"))
     stop("Package 'glmnet' required.")
-  force(formula)
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
   dotdotdot <- list(...)
 
   q_glmnet <- function(AH, V_res) {
     check_q_formula(formula = formula, data = AH)
+    check_missing_regressor(formula = formula, data = AH)
     des <- get_design(formula, data=AH)
     y <- V_res
     args_glmnet <- c(list(y = y, x = des$x,
                         family = family, alpha = alpha), dotdotdot)
-    fit <- do.call(glmnet::cv.glmnet, args = args_glmnet)
-    fit$call <- NULL
-    m <- with(des, list(
-                     fit = fit,
-                     s = s,
-                     formula = formula,
-                     terms = terms,
-                     xlevels = x_levels))
+    model <- do.call(glmnet::cv.glmnet, args = args_glmnet)
+    model$call <- NULL
+
+    des$x <- NULL
+    m  <- list(model = model,
+               s = s,
+               design = des)
+
     class(m) <- c("q_glmnet")
     return(m)
   }
-  class(q_glmnet) <- c("q_model")
+  q_glmnet <- new_q_model(q_glmnet)
   return(q_glmnet)
 }
 
 predict.q_glmnet <- function(object, new_AH, ...) {
-  mf <- with(object, model.frame(terms, data=new_AH, xlev = xlevels,
-                                 drop.unused.levels=FALSE))
-  newx <- model.matrix(mf, data=new_AH, xlev = object$xlevels)
-  pred <- predict(getElement(object, "fit"),
+  design <- getElement(object, "design")
+  model <- getElement(object, "model")
+  s <- getElement(object, "s")
+
+  newx <- apply_design(design, data = new_AH)
+  pred <- predict(model,
                   newx = newx,
                   type = "response",
-                  s = getElement(object, "s"))
+                  s = s)
   return(pred)
 }
 
@@ -214,11 +236,12 @@ perf_ranger <- function(fit, data,  ...) {
 
 #' @rdname q_model
 #' @export
-q_rf <- function(formula = ~ .,
+q_rf <- function(formula = ~.,
                  num.trees=c(250, 500, 750), mtry=NULL,
                  cv_args=list(K=3, rep=1), ...) {
   if (!requireNamespace("ranger")) stop("Package 'ranger' required.")
-  force(formula)
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
   dotdotdot <- list(...)
   hyper_par <- expand.list(num.trees=num.trees, mtry=mtry)
   rf_args <- function(p) {
@@ -244,69 +267,85 @@ q_rf <- function(formula = ~ .,
       best <- if (is.null(res)) 1 else which.min(summary(res))
     }
     if (!is.null(res)) {
-      fit <- res$fit[[best]]
+      model <- res$fit[[best]]
     } else {
-      fit <- ml[[best]](data)
+      model <- ml[[best]](data)
     }
-    res <- with(des, list(fit = fit,
-                          rf_args = rf_args(hyper_par[[best]]),
-                          num.trees=num.trees[best],
-                          xlevels = x_levels,
-                          terms = terms))
-    class(res) <- c("q_rf")
-    return(res)
+    model$call <- NULL
+
+    des$x <- NULL
+    m <- list(model = model,
+              rf_args = rf_args(hyper_par[[best]]),
+              num.trees=num.trees[best],
+              design = des)
+    class(m) <- c("q_rf")
+    return(m)
   }
-  class(q_rf) <- c("q_model")
+  q_rf <- new_q_model(q_rf)
   return(q_rf)
 }
 
 predict.q_rf <- function(object, new_AH, ...) {
-  mf <- with(object, model.frame(terms, data=new_AH, xlev = xlevels,
-                                 drop.unused.levels=FALSE))
-  newx <- model.matrix(mf, data=new_AH, xlev = object$xlevels)
-  pr <- predict(object$fit, data=newx, num.threads=1)$predictions
-  return(pr)
+  model <- getElement(object, "model")
+  design <- getElement(object, "design")
 
+  new_data <- apply_design(design = design, data = new_AH)
+  pr <- predict(model, data=new_data, num.threads=1)$predictions
+  return(pr)
 }
 
 # SuperLearner interface --------------------------------------------------
 
 #' @rdname q_model
 #' @export
-q_sl <- function(formula = ~ A*., SL.library=c("SL.mean", "SL.glm"), ...){
+q_sl <- function(formula = ~ .,
+                 SL.library=c("SL.mean", "SL.glm"),
+                 env = as.environment("package:SuperLearner"),
+                 onlySL = TRUE,
+                 ...){
   if (!requireNamespace("SuperLearner"))
     stop("Package 'SuperLearner' required.")
-  dotdotdot <- list(...)
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
   force(SL.library)
+  force(env)
+  dotdotdot <- list(...)
   q_sl <- function(AH, V_res) {
     check_q_formula(formula = formula, data = AH)
     des <- get_design(formula, data=AH)
     if (missing(V_res) || is.null(V_res))
       V_res <- get_response(formula, data=AH)
-    X <- as.data.frame(des$x)
-    colnames(X) <- gsub("[^[:alnum:]]", "_", colnames(X))
     args_SL <- list(Y = as.numeric(V_res),
-                    X = X,
-                    SL.library = SL.library)
+                    X = as.data.frame(des$x),
+                    SL.library = SL.library,
+                    env = env)
     args_SL <- append(args_SL, dotdotdot)
-    SL_model <- suppressWarnings(do.call(SuperLearner::SuperLearner, args = args_SL))
-    m <- with(des, list(fit = SL_model,
-                        xlevels = x_levels,
-                        terms = terms))
+    model <- do.call(SuperLearner::SuperLearner, args = args_SL)
+    model$call <- NULL
+    if(onlySL == TRUE){
+      model$fitLibrary[model$coef == 0] <- NA
+    }
+
+    des$x <- NULL
+    m <- list(model = model,
+              design = des,
+              onlySL = onlySL)
     class(m) <- c("q_sl")
     return(m)
   }
-  class(q_sl) <- c("q_model")
+  q_sl <- new_q_model(q_sl)
   return(q_sl)
 }
 
 predict.q_sl <- function(object, new_AH, ...) {
-  mf <- with(object, model.frame(terms, data=new_AH, xlev = xlevels,
-                                 drop.unused.levels=FALSE))
-  newx <- model.matrix(mf, data=as.data.frame(new_AH), xlev = object$xlevels)
-  newx <- as.data.frame(newx)
-  colnames(newx) <- gsub("[^[:alnum:]]", "_", colnames(newx))
-  pred <- suppressWarnings(predict(getElement(object, "fit"),
-                                   newdata = newx)$pred[, 1])
+  model <- getElement(object, "model")
+  design <- getElement(object, "design")
+  onlySL <- getElement(object, "onlySL")
+
+  newdata <- apply_design(design = design, data = new_AH)
+  newdata <- as.data.frame(newdata)
+  pred <- predict(model,
+                  newdata = newdata,
+                  onlySL = onlySL)$pred[, 1]
   return(pred)
 }

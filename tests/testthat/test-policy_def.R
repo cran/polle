@@ -1,9 +1,34 @@
 
+test_that("policy_def checks the action set",{
+  d <- sim_single_stage(2e3, seed=1)
+  pd <- policy_data(d,
+                    action="A",
+                    covariates = list("Z", "B", "L"),
+                    utility="U")
+
+  p <- policy_def("test")
+
+  expect_warning(
+    p(pd),
+    "The policy actions does not comply with the action set of the policy data object."
+  )
+
+  pd <- policy_data(d,
+                    action="A",
+                    covariates = list("Z", "B", "L"),
+                    utility="U",
+                    action_set = c("1", "0", "test"))
+
+  expect_error(
+    p(pd),
+    NA
+  )
+
+})
 
 # Single stage ------------------------------------------------------------
 
 test_that("policy_def handles static policies (single stage).",{
-  source(system.file("sim", "single_stage.R", package="polle"))
   d <- sim_single_stage(2e3, seed=1)
   pd <- policy_data(d,
                     action="A",
@@ -29,7 +54,7 @@ test_that("policy_def handles static policies (single stage).",{
   )
 
   p <- policy_def(TRUE)
-  expect_error(
+  expect_warning(
     p(pd)[["d"]],
     "The policy actions does not comply with the action set of the policy data object."
   )
@@ -47,7 +72,7 @@ test_that("policy_def handles static policies (single stage).",{
   )
 
   p <- policy_def(list(2))
-  expect_error(
+  expect_warning(
     p(pd)[["d"]],
     "The policy actions does not comply with the action set of the policy data object."
   )
@@ -81,7 +106,6 @@ test_that("policy_def handles static policies (single stage).",{
 })
 
 test_that("policy_def handles dynamic policies (single stage).",{
-  source(system.file("sim", "single_stage.R", package="polle"))
   d <- sim_single_stage(2e3, seed=1)
   pd <- policy_data(d,
                     action="A",
@@ -127,7 +151,6 @@ test_that("policy_def handles dynamic policies (single stage).",{
 # Two stages ------------------------------------------------------------
 
 test_that("policy_def handles static policies (two stages).",{
-  source(system.file("sim", "two_stage.R", package="polle"))
   d <- sim_two_stage(2e3, seed=1)
   pd <- policy_data(d,
                     action = c("A_1", "A_2"),
@@ -169,13 +192,13 @@ test_that("policy_def handles static policies (two stages).",{
   )
 
   p <- policy_def(2, reuse = TRUE)
-  expect_error(
+  expect_warning(
     p(pd),
     "The policy actions does not comply with the action set of the policy data object."
   )
 
   p <- policy_def(c(1,2), reuse = FALSE)
-  expect_error(
+  expect_warning(
     p(pd),
     "The policy actions does not comply with the action set of the policy data object."
   )
@@ -189,7 +212,6 @@ test_that("policy_def handles static policies (two stages).",{
 })
 
 test_that("policy_def handles dynamic policies (two stages).",{
-  source(system.file("sim", "two_stage.R", package="polle"))
   d <- sim_two_stage(2e3, seed=1)
   pd <- policy_data(d,
                     action = c("A_1", "A_2"),
@@ -264,7 +286,6 @@ test_that("policy_def handles dynamic policies (two stages).",{
 # Stochastic number of stages ---------------------------------------------
 
 test_that("policy_def handles a stochastic number of stages", {
-  source(system.file("sim", "multi_stage.R", package="polle"))
   d <- sim_multi_stage(1e3, seed = 1)
   # constructing policy_data object:
   pd <- policy_data(data = d$stage_data,

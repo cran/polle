@@ -1,3 +1,10 @@
+new_policy <- function(fun, name){
+  attr(fun, "name") <- name
+  class(fun) <- c("policy", "function")
+
+  return(fun)
+}
+
 #' @title Policy-class
 #' @name policy
 #'
@@ -18,7 +25,6 @@
 #' action variable \code{d}.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
 #' d <- sim_two_stage(5e2, seed=1)
 #' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
@@ -36,8 +42,8 @@
 #'
 #' # V-restricted (Doubly Robust) Q-learning:
 #' # specifying the learner:
-#' pl <- policy_learn(type = "rqvl",
-#'                    control = control_rqvl(qv_models = q_glm(formula = ~ C)))
+#' pl <- policy_learn(type = "drql",
+#'                    control = control_drql(qv_models = q_glm(formula = ~ C)))
 #'
 #' # fitting the policy (object):
 #' po <- pl(policy_data = pd,
@@ -71,7 +77,6 @@ NULL
 #' @examples
 #' library("polle")
 #' ### Single stage"
-#' source(system.file("sim", "single_stage.R", package="polle"))
 #' d1 <- sim_single_stage(5e2, seed=1)
 #' pd1 <- policy_data(d1, action="A", covariates=list("Z", "B", "L"), utility="U")
 #' pd1
@@ -89,8 +94,7 @@ NULL
 #' p1_dynamic(pd1)
 #'
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d2 <- sim_two_stage(5e2, seed=1)
+#' d2 <- sim_two_stage(5e2, seed = 1)
 #' pd2 <- policy_data(d2,
 #'                   action = c("A_1", "A_2"),
 #'                   covariates = list(L = c("L_1", "L_2"),
@@ -128,9 +132,18 @@ policy_def <- function(policy_functions, full_history = FALSE, reuse = FALSE, na
   force(full_history)
   force(reuse)
 
+  # input checks
+  if (!(is.logical(full_history) & (length(full_history) == 1)))
+    stop("full_history must be TRUE or FALSE")
+  if (!(is.logical(reuse) & (length(reuse) == 1)))
+    stop("reuse must be TRUE or FALSE")
   if (full_history == TRUE & reuse == TRUE)
     stop("full_history must be FALSE when reuse is TRUE.")
-
+  if (!is.null(name)){
+    name <- as.character(name)
+    if (length(name) != 1)
+      stop("name must be a character string.")
+  }
   if (reuse == TRUE &
       inherits(policy_functions, what = c("list",
                                           "numeric",
@@ -186,18 +199,16 @@ policy_def <- function(policy_functions, full_history = FALSE, reuse = FALSE, na
     policy_actions <- rbindlist(policy_actions)
     setkeyv(policy_actions, c("id", "stage"))
 
-    stopifnot(
-      any("d" %in% colnames(policy_actions)),
-      all(key(policy_actions) == c("id", "stage"))
-    )
-    if (!all(unlist(policy_actions[, "d"]) %in% action_set))
-      stop("The policy actions does not comply with the action set of the policy data object.")
+    if (!all(unlist(policy_actions[, "d"]) %in% action_set)){
+      mes <- "The policy actions does not comply with the action set of the policy data object."
+      warning(mes)
+    }
 
     return(policy_actions)
   }
 
-  attr(policy, "name") <- name
-  class(policy) <- c("policy", "function")
+  # setting class and attributes:
+  policy <- new_policy(policy, name = name)
 
   return(policy)
 }
@@ -219,6 +230,7 @@ print.policy <- function(x, ...) {
 
   cat("\n")
   cat(cp)
+  cat("\n")
 
 }
 
@@ -235,7 +247,6 @@ print.policy <- function(x, ...) {
 #' action variable \code{d}.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
 #' d <- sim_two_stage(5e2, seed=1)
 #' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
@@ -276,7 +287,6 @@ static_policy <- function(action, name=paste0("a=",action)) {
 #' action variable \code{d}.
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
 #' d <- sim_two_stage(5e2, seed=1)
 #' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
@@ -306,8 +316,6 @@ static_policy <- function(action, name=paste0("a=",action)) {
 #' head(dynamic_policy(fun = function(C_1, C_2) (C_1>1) & (C_2>1))(his))
 #' @noRd
 dynamic_policy <- function(fun){
-  if (!any(class(fun) == "function"))
-    stop("the fun argument in dynamic_policy must be a function.")
 
   if (!"..." %in% names(formals(fun))) {
     formals(fun) <- c(formals(fun), alist(...=))
@@ -324,3 +332,39 @@ dynamic_policy <- function(fun){
   return(f)
 }
 
+get_cum_rewards <- function(policy_data, policy=NULL) {
+  K <- get_K(policy_data)
+  n <- get_n(policy_data)
+  A <- U <- id <- stage <- NULL  # R-check glob. var.
+  dt <- policy_data$stage_data[, c("id", "stage", "A", "U")]
+  setkeyv(dt, c("id", "stage"))
+  dt[, U:=cumsum(U), by=id]
+
+  count <- 0
+  policy_group <- pol_ind <- NULL # R-check glob. var.
+  dt[, policy_group:=0]
+  if (!is.null(policy)) {
+    if (!is.list(policy)) policy <- list(policy)
+    for (pol in policy) {
+      count <- count+1
+      d <- merge(dt, pol(policy_data), all.x = TRUE)
+      d[, pol_ind := all(d == A, na.rm = TRUE), by = "id"]
+      dt[d[["pol_ind"]] == TRUE,
+         policy_group:= count,
+         by=id]
+    }
+    dt <- subset(dt, policy_group>0)
+
+    default_lab <- paste("policy_", 1:length(policy), sep = "")
+    lab <- lapply(policy, function(pol) attributes(pol)[["name"]])
+    for (j in seq_along(lab)){
+      if(is.null(lab[[j]]))
+        lab[[j]] <- default_lab[[j]]
+    }
+    lab <- unlist(lab)
+    dt[,policy_group:=lab[policy_group]]
+  }
+  dt[, policy_group := as.character(policy_group)]
+  dt[policy_group == "0", policy_group := "all"]
+  return(dt)
+}

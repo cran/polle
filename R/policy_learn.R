@@ -1,12 +1,12 @@
 #' Create Policy Learner
 #'
 #' \code{policy_learn()} is used to specify a policy learning method (Q-learning,
-#' V-restricted (doubly robust) Q-learning, V-restricted policy tree
+#' doubly robust Q-learning, policy tree
 #' learning and outcome weighted learning). Evaluating the policy learner returns a policy object.
 #' @param type Type of policy learner method:
 #' \itemize{
-#'   \item{} \code{"rql"}: Realistic Quality/Q-learning.
-#'   \item{} \code{"rqvl"}: Realistic V-restricted (doubly robust) Q-learning.
+#'   \item{} \code{"ql"}: Quality/Q-learning.
+#'   \item{} \code{"drql"}: Doubly Robust Q-learning.
 #'   \item{} \code{"ptl"}: Policy Tree Learning.
 #'   \item{} \code{"owl"}: Outcome Weighted Learning.
 #'   \item{} \code{"earl"}: Efficient Augmentation and Relaxation Learning (only single stage).
@@ -14,7 +14,7 @@
 #' }
 #' @param control List of control arguments. Values (and default values) are set using
 #' \code{control_{type}()}. Key arguments include:\cr
-#' [control_rqvl()]:\cr
+#' [control_drql()]:\cr
 #' \itemize{
 #'   \item{} \code{qv_models}: Single element or list of V-restricted Q-models created
 #'           by [q_glm()], [q_rf()], [q_sl()] or similar functions.
@@ -50,6 +50,8 @@
 #' }
 #' @param alpha Probability threshold for determining realistic actions.
 #' @param L Number of folds for cross-fitting nuisance models.
+#' @param cross_fit_g_models If \code{TRUE}, the g-models will not be
+#' cross-fitted even if L > 1.
 #' @param save_cross_fit_models If \code{TRUE}, the cross-fitted models will be saved.
 #' @param future_args Arguments passed to [future.apply::future_apply()].
 #' @param full_history If \code{TRUE}, the full
@@ -68,7 +70,7 @@
 #'                          the possible actions at each stage.}
 #' \item{\code{alpha}}{Numeric. Probability threshold to determine realistic actions.}
 #' \item{\code{K}}{Integer. Maximal number of stages.}
-#' \item{\code{qv_functions}}{(only if \code{type = "rqvl"}) Fitted V-restricted
+#' \item{\code{qv_functions}}{(only if \code{type = "drql"}) Fitted V-restricted
 #' Q-functions. Contains a fitted model for each stage and action.}
 #' \item{\code{ptl_objects}}{(only if \code{type = "ptl"}) Fitted V-restricted
 #' policy trees. Contains a [policy_tree] for each stage.}
@@ -86,7 +88,7 @@
 #' \item{[get_policy_actions()]}{ Extract the (fitted) policy actions.}
 #' }
 #' @references
-#' V-restricted Q-learning (\code{type = "rqvl"}): Luedtke, Alexander R., and
+#' Doubly Robust Q-learning (\code{type = "drql"}): Luedtke, Alexander R., and
 #' Mark J. van der Laan. "Super-learning of an optimal dynamic treatment rule."
 #' The international journal of biostatistics 12.1 (2016): 305-332.
 #' \doi{10.1515/ijb-2015-0052}.\cr
@@ -102,7 +104,6 @@
 #' @examples
 #' library("polle")
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
 #' d <- sim_two_stage(5e2, seed=1)
 #' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
@@ -116,8 +117,8 @@
 #'
 #' # specifying the learner:
 #' pl <- policy_learn(
-#'   type = "rqvl",
-#'   control = control_rqvl(qv_models = list(q_glm(formula = ~ C_1 + BB),
+#'   type = "drql",
+#'   control = control_drql(qv_models = list(q_glm(formula = ~ C_1 + BB),
 #'                                           q_glm(formula = ~ L_1 + BB))),
 #'   full_history = TRUE
 #' )
@@ -134,31 +135,58 @@
 #' po$qv_functions$stage_1
 #' head(get_policy(pe)(pd))
 #' @export
-policy_learn <- function(type = "rql",
+policy_learn <- function(type = "ql",
                          control = list(),
                          alpha = 0,
-                         L = 1,
                          full_history = FALSE,
+                         L = 1,
+                         cross_fit_g_models = TRUE,
                          save_cross_fit_models = FALSE,
                          future_args = list(future.seed = TRUE),
                          name = type
 ){
+  # input checks:
+  if (length(type) != 1 | !is.character(type))
+    stop("type must be a character string.")
+  if (!(is.numeric(alpha) & (length(alpha) == 1)))
+    stop("alpha must be numeric and in [0, 0.5).")
+  if (!(alpha >=0 & alpha < 0.5))
+    stop("alpha must be numeric and in [0, 0.5).")
+  if (!(is.logical(full_history) & (length(full_history) == 1)))
+    stop("full_history must be TRUE or FALSE")
+  if (!(is.numeric(L) & (length(L) == 1)))
+    stop("L must be an integer greater than 0.")
+  if (!(L %% 1 == 0))
+    stop("L must be an integer greater than 0.")
+  if (L<=0)
+    stop("L must be an integer greater than 0.")
+  if (!(is.logical(cross_fit_g_models) & (length(cross_fit_g_models) == 1)))
+    stop("cross_fit_g_models must be TRUE or FALSE")
+  if (!(is.logical(save_cross_fit_models) & (length(save_cross_fit_models) == 1)))
+    stop("save_cross_fit_models must be TRUE or FALSE")
+  if (!is.null(name)){
+    name <- as.character(name)
+    if (length(name) != 1)
+      stop("name must be a character string.")
+  }
+  if (!is.list(future_args))
+    stop("future_args must be a list.")
 
   pl_args <- list(
     alpha = alpha,
     L = L,
+    cross_fit_g_models = cross_fit_g_models,
     save_cross_fit_models = save_cross_fit_models,
     future_args = future_args,
     full_history = full_history
   )
 
-  if (length(type) != 1 | !is.character(type))
-    stop("type must be a character string.")
+
   type <- tolower(type)
-  if (type %in% c("rql", "ql", "q_learning", "q-learning")) {
+  if (type %in% c("ql", "rql", "q_learning", "q-learning")) {
     call <- "rql"
-  } else if (type %in% c("rqvl", "qvl", "qv_learning", "qv-learning")) {
-    call <- "rqvl"
+  } else if (type %in% c("drql", "rqvl", "qvl", "qv_learning", "qv-learning")) {
+    call <- "drql"
   } else if (type %in% c("ptl", "policytree", "policy_tree")){
     if (!requireNamespace("policytree")) {
       stop("The policytree package is required to perform value searching using trees.")
@@ -174,7 +202,7 @@ policy_learn <- function(type = "rql",
   } else if (type %in% c("rwl")){
     call <- "dyntxregime_rwl"
   } else{
-    stop("Unknown type of policy learner. Use 'rql', 'rqvl', 'ptl', 'owl', 'earl' or 'rwl'.")
+    stop("Unknown type of policy learner. Use 'ql', 'drql', 'ptl', 'owl', 'earl' or 'rwl'.")
   }
   args <- append(pl_args, control)
   pl <- pl(call = call, args = args)
@@ -202,18 +230,6 @@ NULL
 
 #' @rdname policy_learn
 #' @export
-print.policy_object <- function(x, ...){
-  cat("Policy object with list elements:")
-  cat("\n")
-  cp <- paste(names(x), collapse = ", ")
-  cat(cp)
-  cat("\n")
-  cat("Use 'get_policy' to get the associated policy.")
-}
-
-
-#' @rdname policy_learn
-#' @export
 print.policy_learn <- function(x, ...) {
 
   cat("Policy learner with arguments:")
@@ -230,162 +246,9 @@ print.policy_learn <- function(x, ...) {
 
   cat("\n")
   cat(cp)
+  cat("\n")
 
 }
 
-#' @title Get Policy Object
-#'
-#' @description Extract the fitted policy object.
-#' @param object Object of class [policy_eval].
-#' @returns Object of class [policy_object].
-#' @examples
-#' library("polle")
-#' ### Single stage:
-#' source(system.file("sim", "single_stage.R", package="polle"))
-#' d1 <- sim_single_stage(5e2, seed=1)
-#' pd1 <- policy_data(d1, action="A", covariates=list("Z", "B", "L"), utility="U")
-#' pd1
-#'
-#'
-#' # evaluating the policy:
-#' pe1 <- policy_eval(policy_data = pd1,
-#'                    policy_learn = policy_learn(type = "rqvl",
-#'                                                control = control_rqvl(qv_models = q_glm(~.))),
-#'                    g_models = g_glm(),
-#'                    q_models = q_glm())
-#'
-#' # extracting the policy object:
-#' get_policy_object(pe1)
-#' @export
-get_policy_object <- function(object)
-  UseMethod("get_policy_object")
-
-#' @export
-get_policy_object.policy_eval <- function(object){
-  po <- getElement(object, "policy_object")
-  return(po)
-}
-
-#' @title Get Policy
-#'
-#' @description \code{get_policy} extracts the policy from a policy object
-#' or a policy evaluation object The policy is a function which take a
-#' policy data object as input and returns the policy actions.
-#' @param object Object of class [policy_object] or [policy_eval].
-#' @returns function of class [policy].
-#' @examples
-#' library("polle")
-#' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d <- sim_two_stage(5e2, seed=1)
-#' pd <- policy_data(d,
-#'                   action = c("A_1", "A_2"),
-#'                   baseline = c("BB"),
-#'                   covariates = list(L = c("L_1", "L_2"),
-#'                                     C = c("C_1", "C_2")),
-#'                   utility = c("U_1", "U_2", "U_3"))
-#' pd
-#'
-#' ### V-restricted (Doubly Robust) Q-learning
-#'
-#' # specifying the learner:
-#' pl <- policy_learn(type = "rqvl",
-#'                    control = control_rqvl(qv_models = q_glm(formula = ~ C)))
-#'
-#' # fitting the policy (object):
-#' po <- pl(policy_data = pd,
-#'          q_models = q_glm(),
-#'          g_models = g_glm())
-#'
-#' # getting and applying the policy:
-#' head(get_policy(po)(pd))
-#'
-#' # the policy learner can also be evaluated directly:
-#' pe <- policy_eval(policy_data = pd,
-#'                   policy_learn = pl,
-#'                   q_models = q_glm(),
-#'                   g_models = g_glm())
-#'
-#' # getting and applying the policy again:
-#' head(get_policy(pe)(pd))
-#' @export
-get_policy <- function(object){
-  UseMethod("get_policy")
-}
-
-#' @export
-get_policy.policy_eval <- function(object){
-  po <- get_policy_object(object)
-  if (is.null(po))
-    return(NULL)
-  p <- get_policy(po)
-  return(p)
-}
-
-#' Get Policy Functions
-#'
-#' \code{get_policy_functions()} returns a function defining the policy at
-#' the given stage. \code{get_policy_functions()} is useful when implementing
-#' the learned policy.
-#'
-#' @param object Object of class "policy_object" or "policy_eval",
-#' see [policy_learn] and [policy_eval].
-#' @param stage Integer. Stage number.
-#' @returns Functions with arguments:
-#' \item{\code{H}}{[data.table] containing the variables needed to evaluate the policy (and g-function).}
-#' @examples
-#' library("polle")
-#' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
-#' d <- sim_two_stage(5e2, seed=1)
-#' pd <- policy_data(d,
-#'                   action = c("A_1", "A_2"),
-#'                   baseline = "BB",
-#'                   covariates = list(L = c("L_1", "L_2"),
-#'                                     C = c("C_1", "C_2")),
-#'                   utility = c("U_1", "U_2", "U_3"))
-#' pd
-#'
-#' ### Realistic V-restricted Policy Tree Learning
-#' # specifying the learner:
-#' pl <- policy_learn(type = "ptl",
-#'                    control = control_ptl(policy_vars = list(c("C_1", "BB"),
-#'                                                             c("L_1", "BB"))),
-#'                    full_history = TRUE,
-#'                    alpha = 0.05)
-#'
-#' # evaluating the learner:
-#' pe <- policy_eval(policy_data = pd,
-#'                   policy_learn = pl,
-#'                   q_models = q_glm(),
-#'                   g_models = g_glm())
-#'
-#' # getting the policy function at stage 2:
-#' pf2 <- get_policy_functions(pe, stage = 2)
-#' args(pf2)
-#'
-#' # applying the policy function to new data:
-#' set.seed(1)
-#' L_1 <- rnorm(n = 10)
-#' new_H <- data.table(C = rnorm(n = 10),
-#'                     L = L_1,
-#'                     L_1 = L_1,
-#'                     BB = "group1")
-#' d2 <- pf2(H = new_H)
-#' head(d2)
-#' @export
-get_policy_functions <- function(object, stage){
-  UseMethod("get_policy_functions")
-}
-
-#' @export
-get_g_functions.policy_object <- function(object){
-  getElement(object, "g_functions")
-}
-
-#' @export
-get_q_functions.policy_object <- function(object){
-  getElement(object, "q_functions")
-}
 
 

@@ -9,7 +9,13 @@
 \alias{q_sl}
 \title{q_model class object}
 \usage{
-q_glm(formula = ~A * ., family = gaussian(), model = FALSE, ...)
+q_glm(
+  formula = ~A * .,
+  family = gaussian(),
+  model = FALSE,
+  na.action = na.pass,
+  ...
+)
 
 q_glmnet(
   formula = ~A * .,
@@ -27,7 +33,13 @@ q_rf(
   ...
 )
 
-q_sl(formula = ~A * ., SL.library = c("SL.mean", "SL.glm"), ...)
+q_sl(
+  formula = ~.,
+  SL.library = c("SL.mean", "SL.glm"),
+  env = as.environment("package:SuperLearner"),
+  onlySL = TRUE,
+  ...
+)
 }
 \arguments{
 \item{formula}{An object of class \link{formula} specifying the design matrix for
@@ -41,6 +53,9 @@ be used in the model.}
 
 \item{model}{(Only used by \code{q_glm}) If \code{FALSE} model frame will
 not be saved.}
+
+\item{na.action}{(Only used by \code{q_glm}) A function which indicates what
+should happen when the data contain NAs, see \link{na.pass}.}
 
 \item{...}{Additional arguments passed to \code{\link[=glm]{glm()}}, \link[glmnet:glmnet]{glmnet::glmnet},
 \link[ranger:ranger]{ranger::ranger} or \link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner}.}
@@ -65,6 +80,12 @@ of folds and
 \item{SL.library}{(Only used by \code{q_sl}) Either a character vector of
 prediction algorithms or a list containing character vectors,
 see \link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner}.}
+
+\item{env}{(Only used by \code{q_sl}) Environment containing the learner
+functions. Defaults to the calling environment.}
+
+\item{onlySL}{(Only used by \code{q_sl}) Logical. If TRUE, only saves and computes predictions
+for algorithms with non-zero coefficients in the super learner object.}
 }
 \value{
 q_model object: function with arguments 'AH'
@@ -88,32 +109,29 @@ model with the lowest cross-validation error is selected.\cr
 \examples{
 library("polle")
 ### Single stage case
-source(system.file("sim", "single_stage.R", package="polle"))
-d <- sim_single_stage(5e2, seed=1)
-pd <- policy_data(d,
-                  action="A",
-                  covariates=list("Z", "B", "L"),
-                  utility="U")
-pd
+d1 <- sim_single_stage(5e2, seed=1)
+pd1 <- policy_data(d1,
+                   action="A",
+                   covariates=list("Z", "B", "L"),
+                   utility="U")
+pd1
 
 # available history variable names for the outcome regression:
-get_history_names(pd)
+get_history_names(pd1)
 
 # evaluating the static policy a=1 using inverse
 # propensity weighting based on the given Q-model:
-pe <- policy_eval(type = "or",
-            policy_data = pd,
-            policy = policy_def(1, name = "A=1"),
-            q_model = q_glm(formula = ~A*.))
-pe
+pe1 <- policy_eval(type = "or",
+                   policy_data = pd1,
+                   policy = policy_def(1, name = "A=1"),
+                   q_model = q_glm(formula = ~A*.))
+pe1
 
 # getting the fitted Q-function values
-head(predict(get_q_functions(pe), pd))
+head(predict(get_q_functions(pe1), pd1))
 
 ### Two stages:
-source(system.file("sim", "two_stage.R", package="polle"))
-par0 <- c(gamma = 0.5, beta = 1)
-d2 <- sim_two_stage(5e2, seed=1, par=par0); rm(par0)
+d2 <- sim_two_stage(5e2, seed=1)
 pd2 <- policy_data(d2,
                   action = c("A_1", "A_2"),
                   covariates = list(L = c("L_1", "L_2"),

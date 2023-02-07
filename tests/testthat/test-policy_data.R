@@ -11,10 +11,128 @@ test_that("check_data fails if not given a data.table with unique variables.", {
   expect_error(check_data(data), "'data' has duplicated variable names.")
 })
 
+# Input checks ----
+
+test_that("policy_data checks inputs",{
+  d <- sim_single_stage(10, seed=1)
+
+  expect_error(
+    policy_data(d, action = 1),
+    "'action' must be a vector or a list of type character."
+  )
+  expect_error(
+    policy_data(d, action = TRUE),
+    "'action' must be a vector or a list of type character."
+  )
+  expect_error(
+    policy_data(d, action = "a"),
+    "Action variables a not found in data."
+  )
+  expect_error(
+    policy_data(d, action = c("A", "a")),
+    "Action variables a not found in data."
+  )
+  expect_error(
+    policy_data(d, action = c("a1", "a")),
+    "Action variables a1,a not found in data."
+  )
+
+  expect_error(
+    policy_data(d, action = c("A"), covariates = 1),
+    "'covariates' must be a character vector or a list of character vectors."
+  )
+
+  expect_error(
+    policy_data(d,
+                action = c("A"),
+                covariates = list(X="a",Y="b"),
+                utility = "U"),
+    "Variables not found in data: \"a\", \"b\"."
+  )
+  expect_error(
+    policy_data(d,
+                action = c("A"),
+                covariates = "a",
+                utility = "U"),
+    "Variables not found in data: \"a\"."
+  )
+  expect_error(
+    policy_data(d,
+                action = c("A"),
+                covariates = c("Z"),
+                utility = "U"),
+    NA
+  )
+  expect_error(
+    policy_data(c(1,2,3),
+                action = c("A"),
+                covariates = c("Z"),
+                utility = "U"),
+    "'data' must be a data.table."
+  )
+  expect_error(
+    policy_data(d,
+                type = "test",
+                action = c("A"),
+                covariates = c("Z"),
+                utility = "U"),
+    "'type' must be either \"wide\" or \"long\"."
+  )
+  expect_error(
+    suppressWarnings({
+      policy_data(d,
+                  type = "long",
+                  action = c("A"),
+                  covariates = c("Z"),
+                  utility = "U")
+    })
+  )
+})
 
 # policy_data wide data ---------------------------------------------------
 
 ## two stage ---------------------------------------------------------------
+
+test_that("policy_data handles varying actions set",{
+  d <- sim_two_stage_multi_actions(n = 1e4)
+  expect_error(
+    pd <- policy_data(data = d,
+                      action = c("A_1", "A_2"),
+                      baseline = c("B", "BB"),
+                      covariates = list(L = c("L_1", "L_2"),
+                                        C = c("C_1", "C_2")),
+                      utility = c("U_1", "U_2", "U_3")),
+    NA
+  )
+
+  expect_equal(
+    pd$action_set,
+    sort(c("yes", "no", "default"))
+  )
+
+  sas <- list(c("no", "yes"), c("default","no", "yes"))
+  names(sas) <- c("stage_1", "stage_2")
+  expect_equal(
+    pd$stage_action_sets,
+    sas
+  )
+
+  expect_equal(
+    partial(pd, K=2)$stage_action_sets,
+    sas
+  )
+
+  expect_equal(
+    partial(pd, K=1)$stage_action_sets,
+    sas[1]
+  )
+
+  expect_equal(
+    get_stage_action_sets(subset_id(pd, id = 1:2)),
+    sas
+  )
+
+})
 
 test_that("policy_data handles varying sets of/missing covariates in a given stage",{
   n <- 20
@@ -32,20 +150,6 @@ test_that("policy_data handles varying sets of/missing covariates in a given sta
                   Y_2 = rnorm(n),
                   A_2 = rbinom(n = n, size = 1, prob = .5),
                   U = rnorm(n))
-
-
-  # tmp <- copy(d)
-  # tmp[, `_NA` := Y_2]
-  # tmp[, `_NA` := NA]
-  # measure.vars <- list(X = c("X_1", "X_2"),
-  #                      Y = c("_NA", "Y_2"))
-  # tmp <- melt(tmp, id = "id", measure.vars = measure.vars)
-  #
-  # expect_equal(
-  #   tmp$Y,
-  #   c(rep(NA, n),d$Y_2)
-  # )
-  # rm(tmp)
 
   expect_error(
     pd <- policy_data(data = d,
@@ -494,12 +598,80 @@ test_that("policy_data handles missing values.", {
   expect_error(policy_data(data = ld, baseline_data = bd, type = "long"))
   ld$A <- c(0, NA, 1, NA)
 
+  # missing utility
   ld$U <- c(NA, 10, 0, 5)
-  expect_error(policy_data(data = ld, baseline_data = bd, type = "long"))
+  expect_error(
+    policy_data(data = ld, baseline_data = bd, type = "long"),
+    "The utility varible U has missing values"
+  )
   ld$U <- c(0, 10, 0, 5)
 
+  # allowing for missing covariates
   ld$Z <- c(NA, NA, "B", NA)
-  expect_error(policy_data(data = ld, baseline_data = bd, type = "long"), NA) # allowing for missing covariates
+  expect_error(
+    policy_data(data = ld, baseline_data = bd, type = "long"),
+    NA
+  )
 })
 
+
+# subset_id ------------------------------------------------------------------
+
+test_that("the action set is preserved when subsetting",{
+  d1 <- sim_single_stage(10, seed=1)
+  pd1 <- policy_data(d1, action = "A", covariates = c("Z"), utility = "U")
+
+  expect_error(
+    pd2 <- subset_id(pd1, id = get_id(pd1)[d1$A == "0"]),
+    NA
+  )
+
+  expect_equal(
+    get_action_set(pd1),
+    get_action_set(pd2)
+  )
+
+  invisible(capture.output(
+    expect_error(
+      print(pd2),
+      NA
+    )
+  ))
+
+})
+
+
+# partial -----------------------------------------------------------------
+
+test_that("partial checks input",{
+  d <- sim_multi_stage(5e2, seed = 1)
+  # constructing policy_data object:
+  pd <- policy_data(data = d$stage_data,
+                    baseline_data = d$baseline_data,
+                    type = "long",
+                    id = "id",
+                    stage = "stage",
+                    event = "event",
+                    action = "A",
+                    utility = "U")
+
+  expect_equal(
+    get_K(partial(pd, K = 3)),
+    3
+  )
+
+  expect_error(
+    partial(pd, K = 0),
+    "K must be an integer greater than or equal to 1."
+  )
+  expect_error(
+    partial(pd, K = 1.5),
+    "K must be an integer greater than or equal to 1."
+  )
+  expect_error(
+    partial(pd, K = "1"),
+    "K must be an integer greater than or equal to 1."
+  )
+
+})
 

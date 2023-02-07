@@ -16,7 +16,6 @@
 #'
 #' @examples
 #' ### Two stages:
-#' source(system.file("sim", "two_stage.R", package="polle"))
 #' d <- sim_two_stage(5e2, seed=1)
 #' pd <- policy_data(d,
 #'                   action = c("A_1", "A_2"),
@@ -49,56 +48,60 @@ NULL
 #' @param object Object of class "nuisance_functions". Either \code{g_functions}
 #' or \code{q_functions} as returned by [policy_eval()] or [policy_learn()].
 #' @param new_policy_data Policy data object created by [policy_data()].
-#' @param ... Additional arguments passed to lower level functions.
+#' @param ... Additional arguments.
 #' @returns [data.table] with keys \code{id} and \code{stage} and variables \code{g_a} or \code{Q_a} for
 #' each action a in the actions set.
 #' @examples
 #' library("polle")
 #' ### Single stage:
-#' source(system.file("sim", "single_stage.R", package="polle"))
-#' d1 <- sim_single_stage(5e2, seed=1)
-#' pd1 <- policy_data(d1, action="A", covariates=list("Z", "B", "L"), utility="U")
-#' pd1
+#' d <- sim_single_stage(5e2, seed=1)
+#' pd <- policy_data(d, action="A", covariates=list("Z", "B", "L"), utility="U")
+#' pd
 #' # defining a static policy (A=1):
-#' pl1 <- policy_def(1, name = "A=1")
+#' pl <- policy_def(1, name = "A=1")
 #'
 #' # doubly robust evaluation of the policy:
-#' pe1 <- policy_eval(policy_data = pd1,
-#'             policy = pl1,
-#'             g_models = g_glm(),
-#'             q_models = q_glm())
+#' pe <- policy_eval(policy_data = pd,
+#'                   policy = pl,
+#'                   g_models = g_glm(),
+#'                   q_models = q_glm())
 #' # summarizing the estimated value of the policy:
-#' pe1
+#' pe
 #'
 #' # getting the fitted g-function values:
-#' head(predict(get_g_functions(pe1), pd1))
+#' head(predict(get_g_functions(pe), pd))
 #'
 #' # getting the fitted Q-function values:
-#' head(predict(get_q_functions(pe1), pd1))
+#' head(predict(get_q_functions(pe), pd))
 #' @export
 predict.nuisance_functions <- function(object, new_policy_data, ...){
-  evaluate(object, new_policy_data)
-}
-
-evaluate <- function(object, ...)
-  UseMethod("evaluate")
-
-evaluate.nuisance_functions <- function(object, policy_data){
-  K <- get_K(policy_data)
-  action_set <- get_action_set(policy_data)
+  K <- get_K(new_policy_data)
+  action_set <- get_action_set(new_policy_data)
   full_history <- attr(object, "full_history")
 
   if (length(object) == K){
-    history <- lapply(1:K, function(s) get_history(policy_data, stage = s, full_history = full_history))
-    values <- mapply(history, object, FUN = function(h, f) evaluate(f, new_history = h), SIMPLIFY = FALSE)
+    history <- lapply(1:K, function(s) get_history(new_policy_data,
+                                                   stage = s,
+                                                   full_history = full_history))
+    values <- mapply(history,
+                     object,
+                     FUN = function(h, f) predict(f, h),
+                     SIMPLIFY = FALSE)
     values <- rbindlist(values)
     setkeyv(values, c("id", "stage"))
   } else if (length(object) == 1){
-    history <- state_history(policy_data)
-    values <- evaluate(object[[1]], new_history = history)
+    history <- state_history(new_policy_data)
+    values <- predict(object[[1]], history)
   } else{
     stop("Provide either 1 or K nuisance functions for evaluation.")
   }
 
   return(values)
 }
+
+#' @export
+print.nuisance_functions <- function(x, ...){
+  attr(x, "class") <- NULL
+  print(x)
+}
+

@@ -58,7 +58,7 @@ dyntxregime_earl <- function(policy_data,
   id_stage <- get_id_stage(policy_data)
 
   if (!(length(action_set) == 2))
-    stop("earl only works for binary actions.")
+    stop("earl only works for a dichotomous action set.")
 
   if (alpha != 0)
     stop("alpha must be 0 when using earl")
@@ -100,13 +100,13 @@ dyntxregime_earl <- function(policy_data,
     action_set = action_set,
     K = K
   )
-  class(out) <- "EARL"
+  class(out) <- c("earl","policy_object","list")
 
   return(out)
 }
 
 #' @export
-get_policy.EARL <- function(object){
+get_policy.earl <- function(object){
   earl_object <- getElement(object, "earl_object")
   action_set <- getElement(object, "action_set")
   K <- getElement(object, "K")
@@ -125,6 +125,9 @@ get_policy.EARL <- function(object){
 
     return(policy_actions)
   }
-  class(policy) <- c("policy", "function")
+
+  # setting class and attributes:
+  policy <- new_policy(policy, name = "earl")
+
   return(policy)
 }
