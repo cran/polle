@@ -8,6 +8,9 @@ fit_Q_function <- function(history, Q, q_model){
   A <- get_A(history)
   H <- get_H(history)
   AH <- cbind(A, H)
+  # checking that the dimensions fit:
+  if (nrow(AH) != length(Q))
+    stop("Unable to fit Q-function.")
 
   # checking that all actions in the stage action set occur:
   if (!all(stage_action_set == sort(unique(A)))){
@@ -50,7 +53,7 @@ print.Q_function <- function(x, ...){
   print(y)
 }
 
-predict.Q_function <- function(object, new_history){
+predict.Q_function <- function(object, new_history, ...){
   q_model <- getElement(object, "q_model")
   AH_names <- getElement(object, "AH_names")
   # action set of the new history object
@@ -63,12 +66,13 @@ predict.Q_function <- function(object, new_history){
 
   id_stage <- get_id_stage(new_history)
   new_H <- get_H(new_history)
+  new_AH_names <- c("A", names(new_H))
 
   # checks
   if(!all(stage_action_set %in% action_set))
     stop("The fitted stage action set is not a subset of the new action set.")
-  if (!all(names(new_H) %in% AH_names))
-    stop("new_history does not have the same column names as the original history.")
+  if (!all(AH_names %in% new_AH_names))
+    stop("new_history does not contain the same column names as the original history.")
 
   # getting the historic rewards
   U <- new_history$U
@@ -138,33 +142,52 @@ q_step <- function(policy_data, k, full_history, Q, q_models){
   return(out)
 }
 
-q_step_cf <- function(folds, policy_data, k, full_history, Q, q_models, future_args){
+q_step_cf <- function(folds,
+                      policy_data,
+                      k,
+                      full_history,
+                      Q,
+                      q_models,
+                      save_cross_fit_models,
+                      future_args){
   stage <- NULL
   id <- get_id(policy_data)
   id_k <- get_id_stage(policy_data)[stage == k]$id
   idx_k <- (id %in% id_k)
   rm(stage)
   K <- get_K(policy_data)
-  future_args <- append(future_args, list(X = folds,
-                                          FUN = function(f){
-                                            train_id <- id[-f]
-                                            train_policy_data <- subset_id(policy_data, train_id)
-                                            train_Q <- Q[-f]
-                                            if (train_policy_data$dim$K != K) stop("The number of stages varies accross the training folds.")
-                                            train_q_step <- q_step(train_policy_data, k = k, full_history = full_history, Q = train_Q, q_models = q_models)
-                                            train_q_function <- train_q_step$q_function
+  future_args <- append(future_args,
+                        list(X = folds,
+                             FUN = function(f){
+                               train_id <- id[-f]
+                               train_policy_data <- subset_id(policy_data, train_id)
+                               train_Q <- Q[-f]
+                               if (train_policy_data$dim$K != K)
+                                 stop("The number of stages varies accross the training folds.")
+                               train_q_step <- q_step(train_policy_data,
+                                                      k = k,
+                                                      full_history = full_history,
+                                                      Q = train_Q,
+                                                      q_models = q_models)
+                               train_q_function <- train_q_step$q_function
 
-                                            valid_id <- id[f]
-                                            valid_policy_data <- subset_id(policy_data, valid_id)
-                                            valid_history <- get_history(valid_policy_data, stage = k, full_history = full_history)
-                                            valid_values <- predict(train_q_function, valid_history)
+                               valid_id <- id[f]
+                               valid_policy_data <- subset_id(policy_data, valid_id)
+                               valid_history <- get_history(valid_policy_data,
+                                                            stage = k,
+                                                            full_history = full_history)
+                               valid_values <- predict(train_q_function, valid_history)
 
-                                            out <- list(
-                                              train_q_function = train_q_function,
-                                              valid_values = valid_values
-                                            )
-                                            return(out)
-                                          }))
+                               if (save_cross_fit_models == FALSE)
+                                 train_q_function <- NULL
+
+                               out <- list(
+                                 train_q_function = train_q_function,
+                                 valid_values = valid_values
+                               )
+                               return(out)
+                             })
+  )
   q_step_cf <- do.call(what = future.apply::future_lapply, future_args)
   q_step_cf <- simplify2array(q_step_cf)
 

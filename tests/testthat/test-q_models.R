@@ -51,16 +51,16 @@ test_that("q_models checks formula input", {
 
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
-                           q_models = q_glm(formula = Y~X)), "The Q-model formula ~X is invalid.")
+                           q_models = q_glm(formula = Y~X)))
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
-                           q_models = q_sl(formula = res~X)), "The Q-model formula ~X is invalid.")
+                           q_models = q_sl(formula = res~X)))
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
                            q_models = q_rf(formula = V_res~X * (.))))
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
-                           q_models = q_glmnet(formula = Y~X)), "The Q-model formula ~X is invalid.")
+                           q_models = q_glmnet(formula = Y~X)))
 })
 
 test_that("q_rf formats data correctly via the formula",{
@@ -92,14 +92,13 @@ test_that("q_sl formats data correctly via the formula",{
                      utility="U")
 
   expect_error(
-    suppressWarnings({
-      pe <- policy_eval(
-        policy_data = pd1,
-        policy_learn = policy_learn(type = "ql", alpha = 0.05),
-        g_models = g_glm(),
-        g_full_history = FALSE,
-        q_models = q_sl()
-      ) }),
+    pe <- policy_eval(
+      policy_data = pd1,
+      policy_learn = policy_learn(type = "ql", alpha = 0.05),
+      g_models = g_glm(),
+      g_full_history = FALSE,
+      q_models = q_sl()
+    ),
     NA
   )
 
@@ -135,23 +134,11 @@ test_that("q_sl can find user-defined learners",{
     }
   })
 
-  # with(env,{
-  #   predict.SL.test <- function (object, newdata, ...){
-  #     if (is.matrix(newdata)) {
-  #       newdata = as.data.frame(newdata)
-  #     }
-  #     pred <- predict(object = object$object, newdata = newdata,
-  #                     type = "response")
-  #     pred
-  #   }
-  # })
-
   expect_error(
     qfun <- polle:::fit_Q_functions(pd,
                                     p(pd),
                                     q_sl(SL.library = "SL.test", env = env)),
     NA)
-
 
 })
 

@@ -1,4 +1,4 @@
-fit_QV_function <- function(history, Z, qv_model, valid_ids){
+fit_blip_function <- function(history, Z, blip_model, valid_ids){
   action_set <- getElement(history, "action_set")
   stage_action_set <- getElement(history, "stage_action_set")
   stage <- getElement(history, "stage")
@@ -24,71 +24,51 @@ fit_QV_function <- function(history, Z, qv_model, valid_ids){
       )
   }
 
-  # fitting the QV-model:
-  qv_model <- apply(
-    Z[, stage_action_set],
-    MARGIN = 2,
-    function(z){
-      qv_model(V_res = z, AH = H, folds = folds)
-    }
-  )
-  names(qv_model) <- paste("QV_", stage_action_set, sep = "")
+  # fitting the blip-model:
+  z <- Z[, stage_action_set]
+  blip <- z[, 2] - z[,1]
+  blip_model <- blip_model(AH = H, V_res = blip, folds = folds)
 
-  qv_function <- list(
-    qv_model = qv_model,
+  blip_function <- list(
+    blip_model = blip_model,
     action_set = action_set,
     stage_action_set = stage_action_set,
     stage = stage
   )
-  class(qv_function) <- "QV_function"
+  class(blip_function) <- "blip_function"
 
-  return(qv_function)
+  return(blip_function)
 }
 
-predict.QV_function <- function(object, new_history, ...){
+predict.blip_function <- function(object, new_history, ...){
   id_stage <- get_id_stage(new_history)
   new_H <- get_H(new_history)
-  # action set of the new history object
-  action_set <- getElement(new_history, "action_set")
-  # stage action set of the fitted QV-function
-  stage_action_set <- getElement(object, "stage_action_set")
-  stage <- getElement(object, "stage")
-  qv_model <- getElement(object, "qv_model")
+  blip_model <- getElement(object, "blip_model")
+  blip <- predict(blip_model, new_H)
+  blip <- data.table(id_stage, blip = blip)
+  setkeyv(blip, c("id", "stage"))
 
-  qv_values <- matrix(NA, nrow = nrow(new_H), ncol = length(action_set))
-  colnames(qv_values) <- paste("QV_", action_set, sep = "")
-
-  qv_values[, action_set %in% stage_action_set] <- sapply(
-    qv_model,
-    function(qvm){
-      predict(qvm, new_H)
-    }
-  )
-  qv_values <- data.table(id_stage, qv_values)
-  setkeyv(qv_values, c("id", "stage"))
-
-  return(qv_values)
+  return(blip)
 }
 
-#' @title Control arguments for doubly robust Q-learning
-#' @description \code{control_drql} sets the default control arguments
-#' for doubly robust Q-learning, \code{type = "drql"}.
-#' @param qv_models Single element or list of V-restricted Q-models created
+
+#' @title Control arguments for doubly robust blip-learning
+#' @description \code{control_blip} sets the default control arguments
+#' for doubly robust blip-learning, \code{type = "blip"}.
+#' @param blip_models Single element or list of V-restricted blip-models created
 #' by [q_glm()], [q_rf()], [q_sl()] or similar functions.
 #' @returns list of (default) control arguments.
 #' @export
-control_drql <- function(qv_models = q_glm(~.)){
+control_blip <- function(blip_models = q_glm(~.)){
   control <- as.list(environment())
   return(control)
 }
 
-# note: if L > 1 and alpha > 0 then the g_functions fitted on the complete data
-# is used to determine future realistic actions.
-drql <- function(policy_data,
+blip <- function(policy_data,
                  alpha,
                  g_models, g_functions, g_full_history,
                  q_models, q_full_history,
-                 qv_models, full_history,
+                 blip_models, full_history,
                  L, cross_fit_g_models,
                  save_cross_fit_models, future_args,
                  ...){
@@ -106,11 +86,13 @@ drql <- function(policy_data,
     if (length(q_models) != K)
       stop("q_models must either be a list of length K or a single Q-model.")
   }
-  if(is.null(qv_models))
-    stop("qv_models are missing.")
-  if (is.list(qv_models)){
-    if (length(qv_models) != K) stop("qv_models must either be a list of length K or a single QV-model.")
+  if(is.null(blip_models))
+    stop("blip_models are missing.")
+  if (is.list(blip_models)){
+    if (length(blip_models) != K) stop("blip_models must either be a list of length K or a single blip-model.")
   }
+  if(!all(lapply(stage_action_sets, length) == 2))
+    stop("policy_learn with type 'blip' only works for dichotomous stage action sets.")
 
   # getting the observed actions:
   actions <- get_actions(policy_data)
@@ -130,8 +112,8 @@ drql <- function(policy_data,
   }
 
   # (cross-)fitting the g-functions:
-  g_functions_cf <- NULL
   valid_ids <- NULL
+  g_functions_cf <- NULL
   if (!is.null(folds) & cross_fit_g_models == TRUE){
     g_cf <- fit_g_functions_cf(
       policy_data = policy_data,
@@ -179,16 +161,13 @@ drql <- function(policy_data,
   # (n X K+1) matrix with entries Q_k(H_{k,i}, d_k(H_{k,i})), Q_{K+1} = U:
   Q <- matrix(nrow = n, ncol = K+1)
   Q[, K+1] <- U
-  # (n X K) matrix with entries d_k(H_k) (including unrealistic actions)
-  D <- matrix(nrow = n, ncol = K)
 
   g_cols <- paste("g_", action_set, sep = "")
   q_cols <- paste("Q_", action_set, sep = "")
-  qv_cols <- paste("QV_", action_set, sep = "")
 
   q_functions <- list()
   q_functions_cf <- list()
-  qv_functions <- list()
+  blip_functions <- list()
 
   for (k in K:1){
     if (is.null(folds)){
@@ -240,24 +219,27 @@ drql <- function(policy_data,
     Z <- Z_1 + Z_2 + Z_3
     colnames(Z) <- action_set
 
-    # getting the history for the QV model:
-    qv_history_k <- get_history(policy_data,
-                                stage = k,
-                                full_history = full_history)
-    # fitting the QV-function:
-    if (is.list(qv_models)){
-      qv_model_k <- qv_models[[k]]
+    # getting the history for the blip model:
+    blip_history_k <- get_history(policy_data,
+                                  stage = k,
+                                  full_history = full_history)
+    # fitting the blip-function:
+    if (is.list(blip_models)){
+      blip_model_k <- blip_models[[k]]
     } else{
-      qv_model_k <- qv_models
+      blip_model_k <- blip_models
     }
-    qv_function_k <- fit_QV_function(qv_history_k,
-                                     Z = Z,
-                                     qv_model = qv_model_k,
-                                     valid_ids = valid_ids)
-    qv_functions[[k]] <- qv_function_k
-    # getting the QV-function values:
-    qv_values_k <- predict(qv_function_k, new_history = qv_history_k)
+    blip_function_k <- fit_blip_function(blip_history_k,
+                                         Z = Z,
+                                         blip_model = blip_model_k,
+                                         valid_ids = valid_ids)
+    blip_functions[[k]] <- blip_function_k
 
+    # getting the blip-function values:
+    blip_k <- predict(blip_function_k, new_history = blip_history_k)
+
+    # getting the stage action with a positive blip:
+    stage_action_set <- stage_action_sets[[k]]
     if (alpha != 0){
       # getting the g-function values for each action:
       g_values_k <- g_values[stage == k, ]
@@ -266,25 +248,27 @@ drql <- function(policy_data,
       realistic_actions <- t(apply(g_values_k[, g_cols, with = FALSE],
                                    MARGIN = 1,
                                    function(x) x >= alpha))
+      realistic_actions <- realistic_actions[, action_set %in% stage_action_set]
       # checking that a realistic action exists:
       if (any(apply(realistic_actions, MARGIN = 1, sum) == 0))
         stop("Cases with no realistic actions occur. Consider resetting the alpha level.")
-      realistic_actions[which(realistic_actions == FALSE)] <- NA
 
-      # getting the action with the maximal realistic QV-function value:
-      dd <- apply(qv_values_k[, qv_cols, with = FALSE] * realistic_actions, MARGIN = 1, which.max)
+      # calculating the optimal actions:
+      dd <- (blip_k$blip > 0) + 1
+
+      # overruling unrealistic actions:
+      realistic <- apply(realistic_actions, 1, prod)
+      dd <- dd * realistic + (realistic == 0) * apply(realistic_actions,1,which.max)
     } else {
-      dd <- apply(qv_values_k[, qv_cols, with = FALSE], MARGIN = 1, which.max)
+      dd <- (blip_k$blip > 0) + 1
     }
-
-    d <- action_set[dd]
+    d <- stage_action_set[dd]
 
     q_d_k <- get_a_values(a = d, action_set = action_set, q_values_k)$P
     Q[idx_k, k] <- q_d_k
     Q[!idx_k, k] <- Q[!idx_k, k+1]
     II[idx_k, k] <- (A_k == d)
     II[!idx_k, k] <- TRUE
-    D[idx_k, k] <- d
     G[!idx_k,k] <- TRUE
   }
 
@@ -298,12 +282,12 @@ drql <- function(policy_data,
   if (length(q_functions_cf) == 0){
     q_functions_cf <- NULL
   }
-  class(qv_functions) <- "nuisance_functions"
-  attr(qv_functions, "full_history") <- full_history
-  names(qv_functions) <- paste("stage_", 1:K, sep = "")
+  class(blip_functions) <- "nuisance_functions"
+  attr(blip_functions, "full_history") <- full_history
+  names(blip_functions) <- paste("stage_", 1:K, sep = "")
 
   out <- list(
-    qv_functions = qv_functions,
+    blip_functions = blip_functions,
     q_functions = q_functions,
     q_functions_cf = q_functions_cf,
     g_functions = g_functions,
@@ -315,14 +299,14 @@ drql <- function(policy_data,
     folds = folds
   )
   out <- remove_null_elements(out)
-  class(out) <- c("drql","policy_object","list")
+  class(out) <- c("blip","policy_object","list")
 
   return(out)
 }
 
 #' @rdname get_policy_functions
 #' @export
-get_policy_functions.drql <- function(object, stage, include_g_values = FALSE, ...){
+get_policy_functions.blip <- function(object, stage, include_g_values = FALSE, ...){
   stage_action_sets <- getElement(object, "stage_action_sets")
   stage_action_set <- stage_action_sets[[stage]]; rm(stage_action_sets)
   K <- getElement(object, "K")
@@ -339,21 +323,14 @@ get_policy_functions.drql <- function(object, stage, include_g_values = FALSE, .
       g_function <- g_functions[[1]]
     }
   }
-  qv_functions <- getElement(object, "qv_functions")
-  qv_model <- getElement(qv_functions[[stage]], "qv_model")
-  full_history <- attr(qv_functions, "full_history")
-
+  blip_functions <- getElement(object, "blip_functions")
+  blip_model <- getElement(blip_functions[[stage]], "blip_model")
+  full_history <- attr(blip_functions, "full_history")
   stage_policy <- function(H){
-    qv_values <- sapply(
-      qv_model,
-      function(qvm){
-        predict(qvm, H)
-      }
-    )
-
+    blip <- predict(blip_model, H)
     g_values <- NULL
     if (alpha == 0){
-      dd <- apply(qv_values, MARGIN = 1, which.max)
+      dd <- (blip > 0) + 1
       d <- stage_action_set[dd]
     } else{
       # evaluating the g-function:
@@ -365,16 +342,18 @@ get_policy_functions.drql <- function(object, stage, include_g_values = FALSE, .
         )
         stop(mes)
       }
+      # g-function values on the stage action set:
       g_values <- predict(g_function$g_model, new_H = H)
 
       # calculating the realistic actions:
       realistic_actions <- t(apply(g_values, MARGIN = 1, function(x) x >= alpha))
       if (any(apply(realistic_actions, MARGIN = 1, sum) == 0))
         stop("Cases with no realistic actions occur. Consider resetting the alpha level.")
-      realistic_actions[which(realistic_actions == FALSE)] <- NA
 
-      # getting the action with the maximal realistic Q-function value:
-      dd <- apply(qv_values * realistic_actions, MARGIN = 1, which.max)
+      # calculating the optimal actions:
+      dd <- (blip > 0) + 1
+      realistic <- apply(realistic_actions, 1, prod)
+      dd <- dd * realistic + (realistic == 0) * apply(realistic_actions,1,which.max)
       d <- stage_action_set[dd]
     }
 
@@ -389,22 +368,28 @@ get_policy_functions.drql <- function(object, stage, include_g_values = FALSE, .
 }
 
 #' @export
-get_policy.drql <- function(object){
+get_policy.blip <- function(object){
   g_functions <- get_g_functions(object)
-  qv_functions <- getElement(object, "qv_functions")
+  blip_functions <- getElement(object, "blip_functions")
 
   action_set <- getElement(object, "action_set")
+  stage_action_sets <- getElement(object, "stage_action_sets")
   K <- getElement(object, "K")
   alpha <- getElement(object, "alpha")
 
   g_cols <- paste("g_", action_set, sep = "")
-  qv_cols <- paste("QV_", action_set, sep = "")
 
   policy <- function(policy_data){
     if (get_K(policy_data) != K)
       stop("The policy do not have the same number of stages as the policy data object.")
-    # evaluating the Q-functions:
-    qv_values <- predict(qv_functions, policy_data)
+    # evaluating the blip-functions:
+    blip_values <- predict(blip_functions, policy_data)
+
+    # getting the stage actions (sa) associated with the blip:
+    sa <- as.data.table(do.call(what = "rbind", stage_action_sets))
+    colnames(sa) <- c("ref_action", "alt_action")
+    sa <- cbind(stage = 1:K, sa)
+    setkeyv(sa, "stage")
 
     if (alpha != 0){
       # evaluating the g-functions:
@@ -417,28 +402,29 @@ get_policy.drql <- function(object){
       ))
       if (any(apply(realistic_actions, MARGIN = 1, sum) == 0))
         stop("Cases with no realistic actions occur. Consider resetting the alpha level.")
-      realistic_actions[which(realistic_actions == FALSE)] <- NA
 
-      # getting the action with the maximal realistic Q-function value:
-      dd <- apply(
-        qv_values[ , qv_cols, with = FALSE] * realistic_actions,
-        MARGIN = 1,
-        which.max
-      )
-      d <- action_set[dd]
+      realistic <- apply(realistic_actions, MARGIN = 1, function(x) action_set[x], simplify = FALSE)
+      realistic_indicator <- unlist(lapply(realistic, function(x) length(x) == 2))
+      realistic[realistic_indicator] <- NA
+      realistic <- unlist(realistic)
+
+      # getting the optimal stage action:
+      blip_values <- merge(blip_values, sa, by = "stage")
+      setkeyv(blip_values, c("id", "stage"))
+      alt_action <- ref_action <- ri <- d <- r <- NULL
+      blip_values[, 'd' := ifelse(blip > 0, alt_action, ref_action)]
+      blip_values[, 'ri' := realistic_indicator]
+      blip_values[, 'r' := realistic]
+      blip_values[ ,'d' := ifelse(ri, d, r)]
     } else{
-      # getting the action with the maximal Q-function value:
-      dd <- apply(
-        qv_values[ , qv_cols, with = FALSE],
-        MARGIN = 1,
-        which.max
-      )
-      d <- action_set[dd]
+      # getting the optimal stage action:
+      blip_values <- merge(blip_values, sa, by = "stage")
+      setkeyv(blip_values, c("id", "stage"))
+      blip_values[, 'd' := ifelse(blip > 0, alt_action, ref_action)]
     }
 
     # collecting the policy actions
-    policy_actions <- get_id_stage(policy_data)
-    policy_actions[, d:= d]
+    policy_actions <- blip_values[, c("id", "stage", "d")]
 
     return(policy_actions)
   }
@@ -450,7 +436,7 @@ get_policy.drql <- function(object){
 }
 
 # plot function
-plot_policy_object.drql <- function(
+plot_policy_object.blip <- function(
     policy_object,
     policy_data,
     id,
@@ -498,11 +484,11 @@ plot_policy_object.drql <- function(
   for (s_ in 1:k){
 
     # full history:
-    qv_functions <- getElement(policy_object, "qv_functions")
-    full_history <- attr(qv_functions, "full_history")
+    blip_functions <- getElement(policy_object, "blip_functions")
+    full_history <- attr(blip_functions, "full_history")
     stopifnot(full_history == g_full_history)
 
-    # geetting the history matrix
+    # getting the history matrix
     his <- get_history(policy_data,
                        stage = stage_[s_],
                        full_history = full_history)
@@ -568,3 +554,4 @@ plot_policy_object.drql <- function(
 
   return(p1)
 }
+

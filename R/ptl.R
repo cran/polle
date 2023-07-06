@@ -127,11 +127,10 @@ ptl <- function(policy_data,
       g_models = g_models,
       full_history = g_full_history,
       folds = folds,
+      save_cross_fit_models = save_cross_fit_models,
       future_args = future_args
     )
-    if (save_cross_fit_models == TRUE){
-      g_functions_cf <- getElement(g_cf, "functions")
-    }
+    g_functions_cf <- getElement(g_cf, "functions")
     g_values <- getElement(g_cf, "values")
     rm(g_cf)
   } else {
@@ -176,7 +175,6 @@ ptl <- function(policy_data,
   q_functions_cf <- list()
   for (k in K:1){
     if (is.null(folds)){
-      # fitting the Q-function
       q_step_k <- q_step(
         policy_data = policy_data,
         k = k,
@@ -189,7 +187,6 @@ ptl <- function(policy_data,
       q_values_k <- getElement(q_step_k, "q_values")
       idx_k <- getElement(q_step_k, "idx_k")
     } else{
-      # cross-fitting the Q-function
       q_step_cf_k <- q_step_cf(
         folds = folds,
         policy_data = policy_data,
@@ -197,11 +194,10 @@ ptl <- function(policy_data,
         full_history = q_full_history,
         Q = Q[, k+1],
         q_models = q_models,
+        save_cross_fit_models = save_cross_fit_models,
         future_args = future_args
       )
-      if (save_cross_fit_models == TRUE){
-        q_functions_cf[[k]] <- getElement(q_step_cf_k, "q_functions_cf")
-      }
+      q_functions_cf[[k]] <- getElement(q_step_cf_k, "q_functions_cf")
       q_values_k <- getElement(q_step_cf_k, "q_values")
       idx_k <- getElement(q_step_cf_k, "idx_k")
       rm(q_step_cf_k)
@@ -401,7 +397,7 @@ get_policy.ptl <- function(object){
 
 #' @rdname get_policy_functions
 #' @export
-get_policy_functions.ptl <- function(object, stage){
+get_policy_functions.ptl <- function(object, stage, ...){
   stage_action_sets <- getElement(object, "stage_action_sets")
   K <- getElement(object, "K")
   g_functions <- getElement(object, "g_functions")

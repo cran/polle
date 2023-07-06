@@ -1,3 +1,70 @@
+test_that("policy_eval returns g and Q-function values",{
+  d <- sim_single_stage(1e2, seed=1)
+  pd <- policy_data(d, action = "A", covariates = c("Z"), utility = "U")
+  p <- policy_def(1)
+
+  pe <- policy_eval(pd, policy=p)
+
+  expect_true(is.data.table(pe$g_values))
+  expect_true(nrow(pe$g_values) == 1e2)
+  expect_true(all(names(pe$g_values) == c("id", "stage", "g_0", "g_1")))
+
+  expect_true(is.data.table(pe$q_values))
+  expect_true(nrow(pe$q_values) == 1e2)
+  expect_true(all(names(pe$q_values) == c("id", "stage", "Q_0", "Q_1")))
+
+  pe <- policy_eval(pd, policy=p, type = "ipw")
+  expect_true(!is.null(pe$g_values))
+  expect_true(is.null(pe$q_values))
+
+  pe <- policy_eval(pd, policy=p, type = "or")
+  expect_true(is.null(pe$g_values))
+  expect_true(!is.null(pe$q_values))
+
+  # cross-fitting
+
+  pe <- policy_eval(pd, policy=p, M=2)
+  expect_true(is.data.table(pe$g_values))
+  expect_true(nrow(pe$g_values) == 1e2)
+  expect_true(all(names(pe$g_values) == c("id", "stage", "g_0", "g_1")))
+  expect_true(all(key(pe$g_values) == c("id", "stage")))
+
+  expect_true(is.data.table(pe$q_values))
+  expect_true(nrow(pe$q_values) == 1e2)
+  expect_true(all(names(pe$q_values) == c("id", "stage", "Q_0", "Q_1")))
+  expect_true(all(key(pe$q_values) == c("id", "stage")))
+
+  pe <- policy_eval(pd, policy=p, type = "ipw", M = 2)
+  expect_true(!is.null(pe$g_values))
+  expect_true(is.null(pe$q_values))
+
+})
+
+test_that("policy_eval do not save g and Q-functions via the save_g_functions and save_q_functions arguments",{
+  d <- sim_single_stage(1e2, seed=1)
+  pd <- policy_data(d, action = "A", covariates = c("Z"), utility = "U")
+  p <- policy_def(1)
+
+  pe <- policy_eval(pd, policy=p)
+
+  expect_true(!is.null(pe$g_functions))
+  expect_true(!is.null(pe$q_functions))
+
+  pe <- policy_eval(pd, policy=p, save_g_functions = FALSE)
+  expect_true(is.null(pe$g_functions))
+  expect_true(!is.null(pe$q_functions))
+
+  pe <- policy_eval(pd, policy=p, save_q_functions = FALSE)
+  expect_true(!is.null(pe$g_functions))
+  expect_true(is.null(pe$q_functions))
+
+  pe <- policy_eval(pd, policy=p, save_g_functions = FALSE, M = 2)
+  expect_true(is.null(pe$cross_fits[[1]]$g_functions))
+
+  pe <- policy_eval(pd, policy=p, save_q_functions = FALSE, M = 2)
+  expect_true(is.null(pe$cross_fits[[1]]$q_functions))
+})
+
 test_that("policy_eval checks inputs",{
   d <- sim_single_stage(1e2, seed=1)
   pd <- policy_data(d, action = "A", covariates = c("Z"), utility = "U")

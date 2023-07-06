@@ -98,10 +98,52 @@ test_that("fit_g_functions handles varying stage-action sets", {
     gfit <- fit_g_functions_cf(folds,
                                policy_data = pd,
                                g_models = list(g_glm(), g_rf()),
-                               full_history = FALSE),
+                               full_history = FALSE,
+                               save_cross_fit_models = TRUE),
+    NA
+  )
+})
+
+test_that("fit_g_function_cf saves the cross-fitted models",{
+  d <- sim_two_stage_multi_actions(n = 1e2)
+  expect_error(
+    pd <- policy_data(data = d,
+                      action = c("A_1", "A_2"),
+                      baseline = c("B", "BB"),
+                      covariates = list(L = c("L_1", "L_2"),
+                                        C = c("C_1", "C_2")),
+                      utility = c("U_1", "U_2", "U_3")),
     NA
   )
 
+  set.seed(1)
+  folds <- list(c(1:30), 31:get_n(pd))
+  expect_error(
+    gfit <- fit_g_functions_cf(folds,
+                               policy_data = pd,
+                               g_models = list(g_glm(), g_rf()),
+                               full_history = FALSE,
+                               save_cross_fit_models = TRUE),
+    NA
+  )
+
+  expect_true(
+    all(!unlist(lapply(gfit$functions, is.null)))
+  )
+
+  set.seed(1)
+  folds <- list(c(1:30), 31:get_n(pd))
+  expect_error(
+    gfit <- fit_g_functions_cf(folds,
+                               policy_data = pd,
+                               g_models = list(g_glm(), g_rf()),
+                               full_history = FALSE,
+                               save_cross_fit_models = FALSE),
+    NA
+  )
+  expect_true(
+    all(unlist(lapply(gfit$functions, is.null)))
+  )
 
 })
 
@@ -122,16 +164,20 @@ test_that("g_models checks formula input", {
 
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
-                           g_models = g_glm(formula = A~X)), "The g-model formula ~X is invalid.")
+                           g_models = g_glm(formula = A~X)), "object 'X' not found when calling 'g_glm' with formula:
+AA ~ X")
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
-                           g_models = g_sl(formula = a~X)), "The g-model formula ~X is invalid.")
+                           g_models = g_sl(formula = a~X)), "object 'X' not found when calling model.frame with formula:
+a ~ X")
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
-                           g_models = g_rf(formula = ~X)), "The g-model formula ~X is invalid.")
+                           g_models = g_rf(formula = ~X)), "object 'X' not found when calling model.frame with formula:
+~X")
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
-                           g_models = g_glmnet(formula = ~X)), "The g-model formula ~X is invalid.")
+                           g_models = g_glmnet(formula = ~X)), "object 'X' not found when calling model.frame with formula:
+AA ~ X")
   expect_error(policy_eval(policy_data = pd,
                            policy = p_dynamic,
                            g_models = g_empir(formula = ~X)), "The g-model formula ~X is invalid.")
@@ -169,14 +215,13 @@ test_that("g_sl formats data correctly via the formula",{
   library("SuperLearner")
   env <- as.environment("package:SuperLearner")
   expect_error(
-    suppressWarnings({
-      policy_eval(
-        policy_data = pd1,
-        policy_learn = policy_learn(type = "ql", alpha = 0.05),
-        g_models = g_sl(formula = ~., env = env),
-        g_full_history = FALSE,
-        q_models = q_glm()
-      ) }),
+    policy_eval(
+      policy_data = pd1,
+      policy_learn = policy_learn(type = "ql", alpha = 0.05),
+      g_models = g_sl(formula = ~., env = env),
+      g_full_history = FALSE,
+      q_models = q_glm()
+    ),
     NA
   )
 })

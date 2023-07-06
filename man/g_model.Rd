@@ -8,6 +8,7 @@
 \alias{g_glmnet}
 \alias{g_rf}
 \alias{g_sl}
+\alias{g_xgboost}
 \title{g_model class object}
 \usage{
 g_empir(formula = ~1, ...)
@@ -37,6 +38,17 @@ g_sl(
   env = as.environment("package:SuperLearner"),
   onlySL = TRUE,
   ...
+)
+
+g_xgboost(
+  formula = ~.,
+  objective = "binary:logistic",
+  params = list(),
+  nrounds,
+  max_depth = 6,
+  eta = 0.3,
+  nthread = 1,
+  cv_args = list(K = 3, rep = 1)
 )
 }
 \arguments{
@@ -68,7 +80,7 @@ lambda at which predictions are required, see \code{\link[glmnet:predict.glmnet]
 \item{mtry}{(Only used by \code{g_rf}) Number of variables to possibly split
 at in each node.}
 
-\item{cv_args}{(Only used by \code{g_rf}) Cross-validation parameters.
+\item{cv_args}{(Only used by \code{g_rf} and \code{g_xgboost}) Cross-validation parameters.
 Only used if multiple hyper-parameters are given. \code{K} is the number
 of folds and
 \code{rep} is the number of replications.}
@@ -80,13 +92,27 @@ a list containing character vectors, see \link[SuperLearner:SuperLearner]{SuperL
 
 \item{onlySL}{(Only used by \code{g_sl}) Logical. If TRUE, only saves and computes predictions
 for algorithms with non-zero coefficients in the super learner object.}
+
+\item{objective}{(Only used by \code{g_xgboost}) specify the learning
+task and the corresponding learning objective, see \link[xgboost:xgb.train]{xgboost::xgboost}.}
+
+\item{params}{(Only used by \code{g_xgboost}) list of parameters.}
+
+\item{nrounds}{(Only used by \code{g_xgboost}) max number of boosting iterations.}
+
+\item{max_depth}{(Only used by \code{g_xgboost}) maximum depth of a tree.}
+
+\item{eta}{(Only used by \code{g_xgboost}) learning rate.}
+
+\item{nthread}{(Only used by \code{g_xgboost}) number of threads.}
 }
 \value{
 g-model object: function with arguments 'A'
 (action vector), 'H' (history matrix) and 'action_set'.
 }
 \description{
-Use \code{g_glm()}, \code{g_empir()}, \code{g_glmnet()}, \code{g_rf()}, and \code{g_sl()} to construct
+Use \code{g_glm()}, \code{g_empir()},
+\code{g_glmnet()}, \code{g_rf()}, \code{g_sl()}, \code{g_xgboost} to construct
 an action probability model/g-model object.
 The constructors are used as input for \code{\link[=policy_eval]{policy_eval()}} and \code{\link[=policy_learn]{policy_learn()}}.
 }
@@ -99,7 +125,8 @@ penalized maximum likelihood).\cr
 \code{g_rf()} is a wrapper of \code{\link[ranger:ranger]{ranger::ranger()}} (random forest).
 When multiple hyper-parameters are given, the
 model with the lowest cross-validation error is selected.\cr
-\code{g_sl()} is a wrapper of \link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner} (ensemble model).
+\code{g_sl()} is a wrapper of \link[SuperLearner:SuperLearner]{SuperLearner::SuperLearner} (ensemble model).\cr
+\code{g_xgboost()} is a wrapper of \link[xgboost:xgb.train]{xgboost::xgboost}.
 }
 \examples{
 library("polle")

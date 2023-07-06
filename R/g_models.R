@@ -43,7 +43,7 @@ check_missing_regressor <- function(formula, data){
   cols_na <- names(which(colSums(is.na(data[,v, with = FALSE])) > 0))
   if (length(cols_na) > 0){
     mes <- paste(cols_na, collapse = ", ")
-    mes <- paste("The regression variables ", mes, " have missing NA values.", sep = "")
+    mes <- paste("The regression variables ", mes, " have missing (NA) values.", sep = "")
     warning(mes)
   }
 }
@@ -62,14 +62,23 @@ get_design <- function(formula, data) {
   attr(tt, "intercept") <- 1
   tt <- delete.response(tt)
   op <- options(na.action = "na.pass")
-  mf <- model.frame(tt, data=data, drop.unused.levels = TRUE)
+
+  mf <- tryCatch(model.frame(tt, data=data, drop.unused.levels = TRUE),
+                    error = function(e) e
+  )
+  if (inherits(mf, "error")) {
+    mf$message <-
+      paste0(mf$message, " when calling model.frame with formula:\n",
+             format(formula))
+    stop(mf)
+  }
+
   xlevels <- .getXlevels(tt, mf)
   x <- model.matrix(mf, data=data)
   options(op)
   idx_inter <- which(colnames(x) == "(Intercept)")
   if (length(idx_inter)>0)
     x <- x[,-idx_inter, drop = FALSE]
-  attr(tt, ".Environment") <- NULL
   colnames(x) <- gsub("[^[:alnum:]]", "_", colnames(x))
   return(list(terms=tt, xlevels=xlevels, x=x))
 }
@@ -94,6 +103,34 @@ apply_design <- function(design, data){
   return(newx)
 }
 
+supp_warnings <- function(expr, mess, fun) {
+  if(!is.character(mess))
+    stop()
+  if(!is.character(fun))
+    stop()
+  if(length(mess) != length(fun))
+    stop()
+
+  eval.parent(
+    substitute(
+      withCallingHandlers(expr, warning = function (w) {
+        mess_ <- mess
+        fun_ <- fun
+        cm   <- conditionMessage(w)
+        cc <- conditionCall(w)
+        cond_cc <- FALSE
+        if (is.call(cc) & length(as.character(cc))>0){
+          cc <- as.character(cc)[[1]]
+          cond_cc <- (cc == fun_)
+        }
+        cond_cm <- (cm == mess_)
+        if (any(cond_cm & cond_cc))
+          tryInvokeRestart("muffleWarning")
+      })
+    )
+  )
+}
+
 new_g_model <- function(g_model){
   class(g_model) <- c("g_model", "function")
   return(g_model)
@@ -103,7 +140,8 @@ new_g_model <- function(g_model){
 
 #' @title g_model class object
 #'
-#' @description  Use \code{g_glm()}, \code{g_empir()}, \code{g_glmnet()}, \code{g_rf()}, and \code{g_sl()} to construct
+#' @description  Use \code{g_glm()}, \code{g_empir()},
+#' \code{g_glmnet()}, \code{g_rf()}, \code{g_sl()}, \code{g_xgboost} to construct
 #' an action probability model/g-model object.
 #' The constructors are used as input for [policy_eval()] and [policy_learn()].
 #'
@@ -124,7 +162,7 @@ new_g_model <- function(g_model){
 #' @param num.trees (Only used by \code{g_rf}) Number of trees.
 #' @param mtry (Only used by \code{g_rf}) Number of variables to possibly split
 #'  at in each node.
-#' @param cv_args (Only used by \code{g_rf}) Cross-validation parameters.
+#' @param cv_args (Only used by \code{g_rf} and \code{g_xgboost}) Cross-validation parameters.
 #' Only used if multiple hyper-parameters are given. \code{K} is the number
 #' of folds and
 #' \code{rep} is the number of replications.
@@ -133,6 +171,13 @@ new_g_model <- function(g_model){
 #' @param env (Only used by \code{g_sl}) Environment containing the learner functions. Defaults to the calling environment.
 #' @param onlySL (Only used by \code{g_sl}) Logical. If TRUE, only saves and computes predictions
 #' for algorithms with non-zero coefficients in the super learner object.
+#' @param objective (Only used by \code{g_xgboost}) specify the learning
+#' task and the corresponding learning objective, see [xgboost::xgboost].
+#' @param nrounds (Only used by \code{g_xgboost}) max number of boosting iterations.
+#' @param max_depth (Only used by \code{g_xgboost}) maximum depth of a tree.
+#' @param eta (Only used by \code{g_xgboost}) learning rate.
+#' @param nthread (Only used by \code{g_xgboost}) number of threads.
+#' @param params (Only used by \code{g_xgboost}) list of parameters.
 #' @param ... Additional arguments passed to [glm()], [glmnet::glmnet],
 #' [ranger::ranger] or [SuperLearner::SuperLearner].
 #' @details
@@ -144,7 +189,8 @@ new_g_model <- function(g_model){
 #' \code{g_rf()} is a wrapper of [ranger::ranger()] (random forest).
 #' When multiple hyper-parameters are given, the
 #' model with the lowest cross-validation error is selected.\cr
-#' \code{g_sl()} is a wrapper of [SuperLearner::SuperLearner] (ensemble model).
+#' \code{g_sl()} is a wrapper of [SuperLearner::SuperLearner] (ensemble model).\cr
+#' \code{g_xgboost()} is a wrapper of [xgboost::xgboost].
 #' @returns g-model object: function with arguments 'A'
 #' (action vector), 'H' (history matrix) and 'action_set'.
 #' @seealso [get_history_names()], [get_g_functions()].
@@ -228,7 +274,7 @@ g_empir <- function(formula = ~1, ...) {
   g_empir <- new_g_model(g_empir)
   return(g_empir)
 }
-predict.g_empir <- function(object, new_H){
+predict.g_empir <- function(object, new_H, ...){
   tab <- object[["tab"]]
   action_set <- object[["action_set"]]
   v <- object[["v"]]
@@ -268,11 +314,9 @@ g_glm <- function(formula = ~.,
                   na.action = na.pass,
                   ...) {
   formula <- as.formula(formula)
-  environment(formula) <- NULL
   dotdotdot <- list(...)
 
   g_glm <- function(A, H, action_set){
-    check_g_formula(formula = formula, data = H)
     formula <- update_g_formula(formula, A, H)
 
     args_glm <- append(list(formula = formula,
@@ -282,7 +326,16 @@ g_glm <- function(formula = ~.,
                             na.action = na.action),
                        dotdotdot)
 
-    model <- do.call(what = "glm", args = args_glm)
+    model <- tryCatch(do.call(what = "glm", args = args_glm),
+                      error = function(e) e
+    )
+    if (inherits(model, "error")) {
+      model$message <-
+        paste0(model$message, " when calling 'g_glm' with formula:\n",
+               format(formula))
+      stop(model)
+    }
+
     model$call <- NULL
 
     m <- list(model = model)
@@ -295,7 +348,7 @@ g_glm <- function(formula = ~.,
 
   return(g_glm)
 }
-predict.g_glm <- function(object, new_H){
+predict.g_glm <- function(object, new_H, ...){
   model <- getElement(object, "model")
   fit <- predict.glm(object = model, newdata = new_H, type = "response")
   probs <- cbind((1-fit), fit)
@@ -313,11 +366,8 @@ g_glmnet <- function(formula = ~.,
                      s = "lambda.min", ...) {
   if (!requireNamespace("glmnet")) stop("Package 'glmnet' required")
   formula <- as.formula(formula)
-  environment(formula) <- NULL
   dotdotdot <- list(...)
   g_glmnet <- function(A, H, action_set){
-    check_g_formula(formula = formula, data = H)
-    check_missing_regressor(formula = formula, data = H)
     formula <- update_g_formula(formula, A, H)
     y <- get_response(formula, data=H)
     des <- get_design(formula, data=H)
@@ -326,10 +376,20 @@ g_glmnet <- function(formula = ~.,
 
     args_glmnet <- list(y = y,  x = des$x, family = family, alpha = alpha)
     args_glmnet <- append(args_glmnet, dotdotdot)
-    model <- do.call(glmnet::cv.glmnet, args = args_glmnet)
-    model$call <- NULL
 
+    model <- tryCatch(do.call(glmnet::cv.glmnet, args = args_glmnet),
+                      error = function(e) e
+    )
+    if (inherits(model, "error")) {
+      model$message <-
+        paste0(model$message, " when calling 'g_glmnet' with formula:\n",
+               format(formula))
+      stop(model)
+    }
+
+    model$call <- NULL
     des$x <- NULL
+
     m  <- list(model = model,
                s = s,
                design = des,
@@ -343,7 +403,7 @@ g_glmnet <- function(formula = ~.,
   return(g_glmnet)
 }
 
-predict.g_glmnet <- function(object, new_H) {
+predict.g_glmnet <- function(object, new_H, ...) {
   design <- getElement(object, "design")
   model <- getElement(object, "model")
   s <- getElement(object, "s")
@@ -387,7 +447,6 @@ g_rf <- function(formula = ~.,
 
   g_rf <- function(A, H, action_set) {
     A <- factor(A, levels = action_set)
-    check_g_formula(formula = formula, data = H)
     des <- get_design(formula, data=H)
     data <- data.frame(A, des$x)
     res <- NULL; best <- 1
@@ -402,9 +461,10 @@ g_rf <- function(formula = ~.,
     } else {
       model <- ml[[best]](data)
     }
-    model$call <- NULL
 
+    model$call <- NULL
     des$x <- NULL
+
     m <- list(model = model,
               rf_args = rf_args(hyper_par[[best]]),
               num.trees=num.trees[best],
@@ -441,13 +501,11 @@ g_sl <- function(formula = ~ .,
   if (!requireNamespace("SuperLearner"))
     stop("Package 'SuperLearner' required.")
   formula <- as.formula(formula)
-  environment(formula) <- NULL
   force(SL.library)
   force(env)
   dotdotdot <- list(...)
   g_sl <- function(A, H, action_set) {
     A <- as.numeric(factor(A, levels=action_set))-1
-    check_g_formula(formula = formula, data = H)
     des <- get_design(formula, data=H)
     sl_args <- append(list(Y=A,
                            X=as.data.frame(des$x),
@@ -456,12 +514,15 @@ g_sl <- function(formula = ~ .,
                            env = env),
                       dotdotdot)
     model <- do.call(SuperLearner::SuperLearner, sl_args)
+
     model$call <- NULL
+    if(all(model$coef == 0))
+      stop("In g_sl(): All metalearner coefficients are zero.")
     if(onlySL == TRUE){
       model$fitLibrary[model$coef == 0] <- NA
     }
-
     des$x <- NULL
+
     m <- list(model = model,
               design = des,
               onlySL = onlySL,
@@ -481,7 +542,6 @@ predict.g_sl <- function(object, new_H, ...) {
   model <- getElement(object, "model")
   design <- getElement(object, "design")
   onlySL <- getElement(object, "onlySL")
-
   newdata <- apply_design(design = design, data = new_H)
   newdata <- as.data.frame(newdata)
   pr <- predict(model,
@@ -491,7 +551,7 @@ predict.g_sl <- function(object, new_H, ...) {
   return(pr)
 }
 
-## sl3 (SuperLearner) interface ----
+# sl3 (SuperLearner) interface ----
 
 # g_sl3 <- function(formula = ~ ., learner, folds=5, ...) {
 #   if (!requireNamespace("sl3"))
@@ -507,7 +567,6 @@ predict.g_sl <- function(object, new_H, ...) {
 #   }
 #   g_sl3 <- function(A, H, action_set) {
 #     A <- factor(A, levels=action_set)
-#     check_g_formula(formula = formula, data = H)
 #     des <- get_design(formula, data=H)
 #     X <- data.frame(des$x)
 #     colnames(X) <- gsub("[^[:alnum:]]", "_", colnames(X))
@@ -537,3 +596,112 @@ predict.g_sl <- function(object, new_H, ...) {
 #   pr <- object$fit$predict(tsk)
 #   return(pr)
 # }
+
+
+# xgboost interface -----------------------------------------------------------------
+
+#' @rdname g_model
+#' @export
+g_xgboost <- function(formula = ~.,
+                      objective = "binary:logistic",
+                      params = list(),
+                      nrounds,
+                      max_depth = 6,
+                      eta = 0.3,
+                      nthread = 1,
+                      cv_args=list(K=3, rep=1)) {
+  if (!requireNamespace("xgboost")) stop("Package 'xgboost' required")
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
+
+  ml <- function(formula = A~., objective,
+                 params, nrounds, max_depth,
+                 eta, nthread){
+    targeted::ml_model$new(formula,
+                           info = "xgBoost",
+                           fit = function(x, y) {
+                             xgboost::xgboost(
+                               data = x, label = y,
+                               objective = objective,
+                               params = params,
+                               nrounds = nrounds,
+                               max_depth = max_depth,
+                               eta = eta,
+                               nthread = nthread,
+                               verbose = 0, print_every = 0)
+                           })
+  }
+
+  ml_args <- expand.list(
+    nrounds = nrounds,
+    max_depth = max_depth,
+    eta = eta
+  )
+  cv_par <- ml_args
+  ml_args <- lapply(ml_args, function(p){
+    p <- append(p,
+                list(
+                  objective = objective,
+                  params = params,
+                  nthread = nthread
+                ))
+    return(p)
+  })
+  ml_models <- lapply(ml_args, function(par) do.call(ml, par))
+
+  g <- function(A, H, action_set) {
+    # checks:
+    if (length(action_set) != 2)
+      stop("g_xgboost in only implemented for a dichotomous action set.")
+
+    # formatting data:
+    A <- factor(A, levels = action_set)
+    A <- as.numeric(A) - 1
+    des <- get_design(formula, data=H)
+    data <- data.frame(A, des$x)
+
+    # cross-validating models
+    cv_res <- NULL
+    if (length(ml_models)>1){
+      cv_res <- tryCatch(targeted::cv(ml_models, data, K=cv_args$K, rep = cv_args$rep),
+                         error = function(e) e)
+      if (inherits(cv_res, "error")) {
+        cv_res$message <-
+          paste0(cv_res$message, " when calling 'g_xgboost' with formula:\n",
+                 format(formula))
+        stop(cv_res)
+      }
+      cv_res$names <- unlist(lapply(cv_par, function(x) paste(paste(names(x), x, sep = ":"), collapse = ",")))
+      ml_args_best <- ml_args[[which.min(coef(cv_res)[, 1])]]
+      model <- do.call(ml, ml_args_best)
+      model <- model$estimate(data)
+    } else {
+      model <- do.call(ml, ml_args[[1]])
+      model <- model$estimate(data)
+    }
+
+    # setting model output
+    des$x <- NULL
+    m <- list(model = model,
+              design = des,
+              action_set = action_set,
+              cv_res = cv_res)
+    class(m) <- c("g_xgboost")
+    return(m)
+  }
+  # setting class:
+  g <- new_g_model(g)
+
+  return(g)
+}
+
+predict.g_xgboost <- function(object, new_H, ...){
+  model <- getElement(object, "model")
+  design <- getElement(object, "design")
+  new_data <- apply_design(design = design, data = new_H)
+
+  fit <- predict(model, newdata = new_data)
+  probs <- cbind((1-fit), fit)
+
+  return(probs)
+}

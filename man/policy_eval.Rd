@@ -19,9 +19,11 @@ policy_eval(
   g_functions = NULL,
   g_models = g_glm(),
   g_full_history = FALSE,
+  save_g_functions = TRUE,
   q_functions = NULL,
   q_models = q_glm(),
   q_full_history = FALSE,
+  save_q_functions = TRUE,
   type = "dr",
   M = 1,
   future_args = list(future.seed = TRUE),
@@ -64,6 +66,8 @@ a single g-model is fitted across all stages. If \code{g_full_history} is
 \item{g_full_history}{If TRUE, the full history is used to fit each g-model.
 If FALSE, the state/Markov type history is used to fit each g-model.}
 
+\item{save_g_functions}{If TRUE, the fitted g-functions are saved.}
+
 \item{q_functions}{Fitted Q-model objects, see \link{nuisance_functions}.
 Only valid if the Q-functions are fitted using the same policy.
 Preferably, use \code{q_models}.}
@@ -74,6 +78,8 @@ Only used for evaluation if \code{q_functions} is \code{NULL}.
 If a single model is provided, the model is reused at every stage.}
 
 \item{q_full_history}{Similar to g_full_history.}
+
+\item{save_q_functions}{Similar to save_g_functions.}
 
 \item{type}{Type of evaluation (dr/doubly robust, ipw/inverse propensity
 weighting, or/outcome regression).}
@@ -112,8 +118,10 @@ associated with the policy for every observation and stage.}
 The policy object returned by \code{policy_learn}, see \link{policy_learn}.}
 \item{\code{g_functions}}{(only if \code{M = 1}) The
 fitted g-functions. Object of class "nuisance_functions".}
+\item{\code{g_values}}{The fitted g-function values.}
 \item{\code{q_functions}}{(only if \code{M = 1}) The
 fitted Q-functions. Object of class "nuisance_functions".}
+\item{\code{q_values}}{The fitted Q-function values.}
 \item{\code{cross_fits}}{(only if \code{M > 1}) List containing the
 "policy_eval" object for every (validation) fold.}
 \item{\code{folds}}{(only if \code{M > 1}) The (validation) folds used
@@ -157,9 +165,8 @@ Furthermore, if \code{g_full_history = FALSE} and \code{g_models} is a
 single model, it is assumed that \eqn{g_1(h_1, a_1) = ... = g_K(h_K, a_K)}.
 
 If \code{type = "or"} \code{policy_eval} returns the empirical estimates of
-the value (\code{value_estimate}) and score (\code{IC}):
+the value (\code{value_estimate}):
 \deqn{E[Q^d_1(H_1, d_1(...))]}
-\deqn{Q^d_1(H_1, d_1(...)) - E[Q^d_1(H_1, d_1(...))]}
 for an appropriate input \eqn{...} to the policy.
 
 If \code{type = "ipw"} \code{policy_eval} returns the empirical estimates of

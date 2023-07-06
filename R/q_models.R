@@ -65,6 +65,15 @@ new_q_model <- function(q_model){
 #' functions. Defaults to the calling environment.
 #' @param onlySL (Only used by \code{q_sl}) Logical. If TRUE, only saves and computes predictions
 #' for algorithms with non-zero coefficients in the super learner object.
+#' @param discreteSL (Only used by \code{q_sl}) If TRUE, select the model with
+#' the lowest cross-validated risk.
+#' @param objective (Only used by \code{q_xgboost}) specify the learning
+#' task and the corresponding learning objective, see [xgboost::xgboost].
+#' @param nrounds (Only used by \code{q_xgboost}) max number of boosting iterations.
+#' @param max_depth (Only used by \code{q_xgboost}) maximum depth of a tree.
+#' @param eta (Only used by \code{q_xgboost}) learning rate.
+#' @param nthread (Only used by \code{q_xgboost}) number of threads.
+#' @param params (Only used by \code{q_xgboost}) list of parameters.
 #' @param ... Additional arguments passed to [glm()], [glmnet::glmnet],
 #' [ranger::ranger] or [SuperLearner::SuperLearner].
 #' @details
@@ -75,6 +84,7 @@ new_q_model <- function(q_model){
 #' When multiple hyper-parameters are given, the
 #' model with the lowest cross-validation error is selected.\cr
 #' \code{q_sl()} is a wrapper of [SuperLearner::SuperLearner] (ensemble model).
+#' \code{q_xgboost()} is a wrapper of [xgboost::xgboost].
 #' @returns q_model object: function with arguments 'AH'
 #' (combined action and history matrix) and 'V_res' (residual value/expected
 #' utility).
@@ -142,14 +152,11 @@ q_glm <- function(formula = ~ A*.,
                   na.action = na.pass,
                   ...){
   formula <- as.formula(formula)
-  environment(formula) <- NULL
   dotdotdot <- list(...)
 
-  q_glm <- function(AH, V_res) {
+  q_glm <- function(AH, V_res, ...) {
     data <- AH
-    check_q_formula(formula = formula, data = data)
     formula <- update_q_formula(formula = formula, data = data, V_res = V_res)
-
     args_glm <- list(
       formula = formula,
       data = data,
@@ -158,9 +165,17 @@ q_glm <- function(formula = ~ A*.,
       na.action = na.action
     )
     args_glm <- append(args_glm, dotdotdot)
-    model <- do.call(what = "glm", args = args_glm)
-    model$call <- NULL
+    model <- tryCatch(do.call(what = "glm", args = args_glm),
+      error = function(e) e
+      )
+    if (inherits(model, "error")) {
+      model$message <-
+        paste0(model$message, " when calling 'q_glm' with formula:\n",
+               format(formula))
+      stop(model)
+    }
 
+    model$call <- NULL
     m <- list(model = model)
 
     class(m) <- c("q_glm")
@@ -170,7 +185,7 @@ q_glm <- function(formula = ~ A*.,
   return(q_glm)
 }
 
-predict.q_glm <- function(object, new_AH){
+predict.q_glm <- function(object, new_AH, ...){
   model <- getElement(object, "model")
   pred <- predict(model, newdata = new_AH, type = "response")
   return(pred)
@@ -188,20 +203,27 @@ q_glmnet <- function(formula = ~ A*.,
   if (!requireNamespace("glmnet"))
     stop("Package 'glmnet' required.")
   formula <- as.formula(formula)
-  environment(formula) <- NULL
   dotdotdot <- list(...)
 
-  q_glmnet <- function(AH, V_res) {
-    check_q_formula(formula = formula, data = AH)
-    check_missing_regressor(formula = formula, data = AH)
+  q_glmnet <- function(AH, V_res, ...) {
     des <- get_design(formula, data=AH)
     y <- V_res
     args_glmnet <- c(list(y = y, x = des$x,
                         family = family, alpha = alpha), dotdotdot)
-    model <- do.call(glmnet::cv.glmnet, args = args_glmnet)
-    model$call <- NULL
 
+    model <- tryCatch(do.call(glmnet::cv.glmnet, args = args_glmnet),
+                      error = function(e) e
+    )
+    if (inherits(model, "error")) {
+      model$message <-
+        paste0(model$message, " when calling 'q_glmnet' with formula:\n",
+               format(formula))
+      stop(model)
+    }
+
+    model$call <- NULL
     des$x <- NULL
+
     m  <- list(model = model,
                s = s,
                design = des)
@@ -241,7 +263,6 @@ q_rf <- function(formula = ~.,
                  cv_args=list(K=3, rep=1), ...) {
   if (!requireNamespace("ranger")) stop("Package 'ranger' required.")
   formula <- as.formula(formula)
-  environment(formula) <- NULL
   dotdotdot <- list(...)
   hyper_par <- expand.list(num.trees=num.trees, mtry=mtry)
   rf_args <- function(p) {
@@ -255,8 +276,7 @@ q_rf <- function(formula = ~.,
       do.call(ranger::ranger, args=rf_args)
     })
 
-  q_rf <- function(AH, V_res) {
-    check_q_formula(formula = formula, data = AH)
+  q_rf <- function(AH, V_res, ...) {
     des <- get_design(formula, data=AH)
     data <- data.frame(V_res, des$x)
     res <- NULL; best <- 1
@@ -271,9 +291,10 @@ q_rf <- function(formula = ~.,
     } else {
       model <- ml[[best]](data)
     }
-    model$call <- NULL
 
+    model$call <- NULL
     des$x <- NULL
+
     m <- list(model = model,
               rf_args = rf_args(hyper_par[[best]]),
               num.trees=num.trees[best],
@@ -302,16 +323,15 @@ q_sl <- function(formula = ~ .,
                  SL.library=c("SL.mean", "SL.glm"),
                  env = as.environment("package:SuperLearner"),
                  onlySL = TRUE,
+                 discreteSL = FALSE,
                  ...){
   if (!requireNamespace("SuperLearner"))
     stop("Package 'SuperLearner' required.")
   formula <- as.formula(formula)
-  environment(formula) <- NULL
   force(SL.library)
   force(env)
   dotdotdot <- list(...)
-  q_sl <- function(AH, V_res) {
-    check_q_formula(formula = formula, data = AH)
+  q_sl <- function(AH, V_res, folds = NULL, ...) {
     des <- get_design(formula, data=AH)
     if (missing(V_res) || is.null(V_res))
       V_res <- get_response(formula, data=AH)
@@ -320,8 +340,31 @@ q_sl <- function(formula = ~ .,
                     SL.library = SL.library,
                     env = env)
     args_SL <- append(args_SL, dotdotdot)
+    if (!is.null(folds)){
+      # given folds, the cvControl argument is overwritten
+      cvControl <- SuperLearner.CV.control(
+        V = length(folds),
+        shuffle = FALSE,
+        validRows = folds
+      )
+      args_SL[["cvControl"]] <- cvControl
+    }
     model <- do.call(SuperLearner::SuperLearner, args = args_SL)
     model$call <- NULL
+    if(all(model$coef == 0)){
+      warning("In q_sl(): All metalearner coefficients are zero. Selecting the learner with the lowest cvrisk.")
+      min_idx <- which.min(model$cvRisk)
+      coef_ <- model$coef * 0
+      coef_[min_idx] <- 1
+      model$coef <- coef_
+    }
+
+    if (discreteSL == TRUE){
+      min_idx <- which.min(model$cvRisk)
+      coef_ <- model$coef * 0
+      coef_[min_idx] <- 1
+      model$coef <- coef_
+    }
     if(onlySL == TRUE){
       model$fitLibrary[model$coef == 0] <- NA
     }
@@ -341,11 +384,118 @@ predict.q_sl <- function(object, new_AH, ...) {
   model <- getElement(object, "model")
   design <- getElement(object, "design")
   onlySL <- getElement(object, "onlySL")
-
   newdata <- apply_design(design = design, data = new_AH)
   newdata <- as.data.frame(newdata)
   pred <- predict(model,
-                  newdata = newdata,
-                  onlySL = onlySL)$pred[, 1]
+                     newdata = newdata,
+                     onlySL = onlySL)$pred[, 1]
+  return(pred)
+}
+
+# xgboost interface -----------------------------------------------------------------
+
+#' @rdname q_model
+#' @export
+q_xgboost <- function(formula = ~.,
+                      objective = "reg:squarederror",
+                      params = list(),
+                      nrounds,
+                      max_depth = 6,
+                      eta = 0.3,
+                      nthread = 1,
+                      cv_args=list(K=3, rep=1)) {
+  if (!requireNamespace("xgboost")) stop("Package 'xgboost' required")
+  formula <- as.formula(formula)
+  environment(formula) <- NULL
+
+  ml <- function(formula = V_res~., objective,
+                 params, nrounds, max_depth,
+                 eta, nthread){
+    targeted::ml_model$new(formula,
+                           info = "xgBoost",
+                           fit = function(x, y) {
+                             xgboost::xgboost(
+                               data = x, label = y,
+                               objective = objective,
+                               params = params,
+                               nrounds = nrounds,
+                               max_depth = max_depth,
+                               eta = eta,
+                               nthread = nthread,
+                               verbose = 0, print_every = 0)
+                           })
+  }
+
+  ml_args <- expand.list(
+      nrounds = nrounds,
+      max_depth = max_depth,
+      eta = eta
+    )
+  cv_par <- ml_args
+  ml_args <- lapply(ml_args, function(p){
+    p <- append(p,
+                list(
+                  objective = objective,
+                  params = params,
+                  nthread = nthread
+                ))
+    return(p)
+  })
+  ml_models <- lapply(ml_args, function(par) do.call(ml, par))
+
+  q <- function(AH, V_res, ...) {
+    # formatting data:
+    des <- get_design(formula, data=AH)
+    if (missing(V_res) || is.null(V_res))
+      V_res <- get_response(formula, data=AH)
+    data <- data.frame(V_res, des$x)
+
+    cv_res <- NULL
+    if (length(ml_models)>1){
+      cv_res <- tryCatch(targeted::cv(ml_models, data, K=cv_args$K, rep = cv_args$rep),
+                         error = function(e) e)
+      if (inherits(cv_res, "error")) {
+        cv_res$message <-
+          paste0(cv_res$message, " when calling 'q_xgboost' with formula:\n",
+                 format(formula))
+        stop(cv_res)
+      }
+      cv_res$names <- unlist(lapply(cv_par, function(x) paste(paste(names(x), x, sep = ":"), collapse = ",")))
+      ml_args_best <- ml_args[[which.min(coef(cv_res)[, 1])]]
+      model <- do.call(ml, ml_args_best)
+      model <- model$estimate(data)
+    } else {
+      model <- do.call(ml, ml_args[[1]])
+      model <- tryCatch(model$estimate(data),
+                        error = function(e) e)
+      if (inherits(model, "error")) {
+        model$message <-
+          paste0(model$message, " when calling 'q_xgboost' with formula:\n",
+                 format(formula))
+        stop(model)
+      }
+    }
+
+    # setting model output
+    des$x <- NULL
+    m <- list(model = model,
+              design = des,
+              cv_res = cv_res,
+              cv_par = cv_par)
+    class(m) <- c("q_xgboost")
+    return(m)
+  }
+  # setting class:
+  q <- new_q_model(q)
+
+  return(q)
+}
+
+predict.q_xgboost <- function(object, new_AH, ...){
+  model <- getElement(object, "model")
+  design <- getElement(object, "design")
+  new_data <- apply_design(design = design, data = new_AH)
+
+  pred <- predict(model, newdata = new_data)
   return(pred)
 }

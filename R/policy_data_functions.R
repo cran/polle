@@ -11,13 +11,15 @@ print.policy_data <- function(x, digits = 2, ...){
   print(s$tab)
 
   cat("\n")
-  cat(
-    paste("Baseline covariates: ", s$baseline_covar, sep = "")
-  )
+
+  bas_var <- paste("Baseline covariates: ", s$baseline_covar, sep = "")
+  cat(paste(strwrap(bas_var, 60), collapse="\n"))
+
   cat("\n")
-  cat(
-    paste("State covariates: ", s$stage_covar, sep = "")
-  )
+
+  state_var <- paste("State covariates: ", s$stage_covar, sep = "")
+  cat(paste(strwrap(state_var, 60), collapse="\n"))
+
   cat("\n")
   mean_utility <- mean(get_utility(x)$U)
   mean_utility <- round(mean_utility, digits = digits)
@@ -92,7 +94,6 @@ summary.policy_data <- function(object, probs=seq(0, 1, .25), ...) {
 #' plot(pd3, policy = list(p0, p1))
 #'
 #' # learning and plotting a policy:
-#' suppressWarnings({
 #'  pe3 <- policy_eval(pd3,
 #'                     policy_learn = policy_learn(),
 #'                     q_models = q_glm(formula = ~t + X + X_lead))
@@ -103,7 +104,6 @@ summary.policy_data <- function(object, probs=seq(0, 1, .25), ...) {
 #'      which = 2,
 #'      stage = 2,
 #'      history_variables = c("t","X"))
-#' })
 #' @export
 plot.policy_data <- function(x,
                              policy=NULL,
@@ -409,6 +409,7 @@ partial.policy_data <- function(object, K){
 #' \code{subset_id} returns a policy data object containing the given IDs.
 #' @param object Object of class [policy_data].
 #' @param id character vectors of IDs.
+#' @param preserve_action_set If TRUE, the action sets must be preserved.
 #' @returns Object of class [policy_data].
 #' @examples
 #' library("polle")
@@ -426,20 +427,27 @@ partial.policy_data <- function(object, K){
 #' pdsub
 #' get_id(pdsub)[1:10]
 #' @export
-subset_id <- function(object, id)
+subset_id <- function(object, id, preserve_action_set = TRUE)
   UseMethod("subset_id")
 
 #' @export
-subset_id.policy_data <- function(object, id){
+subset_id.policy_data <- function(object, id, preserve_action_set = TRUE){
   if (!all(id %in% get_id(object)))
     stop("Invalid subset of IDs.")
   id_ <- id; rm(id)
 
+  action_set <- NULL
+  stage_action_sets <- NULL
+  if (preserve_action_set == TRUE){
+    action_set <- object$action_set
+    stage_action_sets <- object$stage_action_sets
+  }
+
   spd <- new_policy_data(
     stage_data = object$stage_data[id %in% id_],
     baseline_data = object$baseline_data[id %in% id_],
-    action_set = object$action_set,
-    stage_action_sets = object$stage_action_sets
+    action_set = action_set,
+    stage_action_sets = stage_action_sets
   )
 
   return(spd)
@@ -873,7 +881,7 @@ get_actions.policy_data <- function(object){
 #' Get IDs
 #'
 #' \code{get_id} returns the ID for every observation in the policy data object.
-#' @param object Object of class [policy_data].
+#' @param object Object of class [policy_data] or [history].
 #' @returns Character vector.
 #' @examples
 #' ### Two stages:
@@ -902,7 +910,7 @@ get_id.policy_data <- function(object){
 #' Get IDs and Stages
 #'
 #' \code{get_id} returns the stages for every ID for every observation in the policy data object.
-#' @param object Object of class [policy_data].
+#' @param object Object of class [policy_data] or [history].
 #' @returns [data.table] with keys id and stage.
 #' @examples
 #' ### Two stages:

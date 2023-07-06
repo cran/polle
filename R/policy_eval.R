@@ -23,6 +23,8 @@
 #' @param g_full_history If TRUE, the full history is used to fit each g-model.
 #' If FALSE, the state/Markov type history is used to fit each g-model.
 #' @param q_full_history Similar to g_full_history.
+#' @param save_g_functions If TRUE, the fitted g-functions are saved.
+#' @param save_q_functions Similar to save_g_functions.
 #' @param M Number of folds for cross-fitting.
 #' @param type Type of evaluation (dr/doubly robust, ipw/inverse propensity
 #' weighting, or/outcome regression).
@@ -51,8 +53,10 @@
 #' The policy object returned by \code{policy_learn}, see [policy_learn].}
 #' \item{\code{g_functions}}{(only if \code{M = 1}) The
 #' fitted g-functions. Object of class "nuisance_functions".}
+#' \item{\code{g_values}}{The fitted g-function values.}
 #' \item{\code{q_functions}}{(only if \code{M = 1}) The
 #' fitted Q-functions. Object of class "nuisance_functions".}
+#' \item{\code{q_values}}{The fitted Q-function values.}
 #' \item{\code{cross_fits}}{(only if \code{M > 1}) List containing the
 #' "policy_eval" object for every (validation) fold.}
 #' \item{\code{folds}}{(only if \code{M > 1}) The (validation) folds used
@@ -104,9 +108,8 @@
 #' single model, it is assumed that \eqn{g_1(h_1, a_1) = ... = g_K(h_K, a_K)}.
 #'
 #' If \code{type = "or"} \code{policy_eval} returns the empirical estimates of
-#' the value (\code{value_estimate}) and score (\code{IC}):
+#' the value (\code{value_estimate}):
 #' \deqn{E[Q^d_1(H_1, d_1(...))]}
-#' \deqn{Q^d_1(H_1, d_1(...)) - E[Q^d_1(H_1, d_1(...))]}
 #' for an appropriate input \eqn{...} to the policy.
 #'
 #' If \code{type = "ipw"} \code{policy_eval} returns the empirical estimates of
@@ -206,8 +209,8 @@
 #' head(get_policy_actions(pe2))
 policy_eval <- function(policy_data,
                         policy = NULL, policy_learn = NULL,
-                        g_functions = NULL, g_models = g_glm(), g_full_history = FALSE,
-                        q_functions = NULL, q_models = q_glm(), q_full_history = FALSE,
+                        g_functions = NULL, g_models = g_glm(), g_full_history = FALSE, save_g_functions = TRUE,
+                        q_functions = NULL, q_models = q_glm(), q_full_history = FALSE, save_q_functions = TRUE,
                         type = "dr",
                         M = 1, future_args = list(future.seed=TRUE),
                         name = NULL
@@ -284,8 +287,8 @@ policy_eval_type <- function(type,
                              train_policy_data,
                              valid_policy_data,
                              policy, policy_learn,
-                             g_models, g_functions, g_full_history,
-                             q_models, q_functions, q_full_history){
+                             g_models, g_functions, g_full_history, save_g_functions,
+                             q_models, q_functions, q_full_history, save_q_functions){
 
   type <- tolower(type)
   if (length(type) != 1)
@@ -312,18 +315,27 @@ policy_eval_type <- function(type,
   if (is.null(policy)){
     policy <- get_policy(getElement(fits, "policy_object"))
   }
-  policy_actions <- policy(valid_policy_data)
-
-  # checking that the (fitted) policy actions comply with the stage action sets:
-  check_actions(actions = policy_actions,
-                policy_data = train_policy_data)
 
   # calculating the doubly robust score and value estimate:
+  g_functions <- getElement(fits, "g_functions")
+  q_functions <- getElement(fits, "q_functions")
   value_object <- value(type = type,
                         policy_data = valid_policy_data,
                         policy = policy,
-                        g_functions = getElement(fits, "g_functions"),
-                        q_functions = getElement(fits, "q_functions"))
+                        g_functions = g_functions,
+                        q_functions = q_functions)
+  g_values <- getElement(value_object, "g_values")
+  q_values <- getElement(value_object, "q_values")
+
+  # setting g-functions output:
+  if (save_g_functions != TRUE){
+    g_functions <- NULL
+  }
+  # setting Q-functions output:
+  if(save_q_functions != TRUE){
+    q_functions <- NULL
+  }
+
   out <- list(
     value_estimate = getElement(value_object, "value_estimate"),
     type = type,
@@ -331,10 +343,12 @@ policy_eval_type <- function(type,
     value_estimate_ipw = getElement(value_object, "value_estimate_ipw"),
     value_estimate_or = getElement(value_object, "value_estimate_or"),
     id = get_id(valid_policy_data),
-    policy_actions = policy_actions,
+    policy_actions = getElement(value_object, "policy_actions"),
     policy_object = getElement(fits, "policy_object"),
-    g_functions = getElement(fits, "g_functions"),
-    q_functions = getElement(fits, "q_functions")
+    g_functions = g_functions,
+    g_values = g_values,
+    q_functions = q_functions,
+    q_values = q_values
   )
   out <- Filter(Negate(is.null), out)
 
@@ -393,6 +407,25 @@ policy_eval_cross <- function(args,
   policy_actions <- rbindlist(policy_actions)
   setkey(policy_actions, "id", "stage")
 
+  # collecting the g- and Q-values:
+  g_values <- lapply(cross_fits, function(x) getElement(x, "g_values"))
+  null_g_values <- unlist(lapply(g_values, is.null))
+  if (!all(null_g_values)){
+    g_values <- data.table::rbindlist(g_values)
+    setkey(g_values, "id", "stage")
+  } else {
+    g_values <- NULL
+  }
+
+  q_values <- lapply(cross_fits, function(x) getElement(x, "q_values"))
+  null_q_values <- unlist(lapply(q_values, is.null))
+  if (!all(null_q_values)){
+    q_values <- data.table::rbindlist(q_values)
+    setkey(q_values, "id", "stage")
+  } else {
+    q_values <- NULL
+  }
+
   # sorting via the IDs:
   IC <- IC[order(id)]
   id <- id[order(id)]
@@ -404,6 +437,8 @@ policy_eval_cross <- function(args,
               value_estimate_or = value_estimate_or,
               id = id,
               policy_actions = policy_actions,
+              g_values = g_values,
+              q_values = q_values,
               cross_fits = cross_fits,
               folds = folds
   )
