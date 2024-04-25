@@ -274,6 +274,7 @@ g_empir <- function(formula = ~1, ...) {
   g_empir <- new_g_model(g_empir)
   return(g_empir)
 }
+#' @export
 predict.g_empir <- function(object, new_H, ...){
   tab <- object[["tab"]]
   action_set <- object[["action_set"]]
@@ -348,6 +349,7 @@ g_glm <- function(formula = ~.,
 
   return(g_glm)
 }
+#' @export
 predict.g_glm <- function(object, new_H, ...){
   model <- getElement(object, "model")
   fit <- predict.glm(object = model, newdata = new_H, type = "response")
@@ -403,6 +405,7 @@ g_glmnet <- function(formula = ~.,
   return(g_glmnet)
 }
 
+#' @export
 predict.g_glmnet <- function(object, new_H, ...) {
   design <- getElement(object, "design")
   model <- getElement(object, "model")
@@ -427,7 +430,7 @@ perf_ranger_prob <- function(fit, data,  ...) {
 g_rf <- function(formula = ~.,
                  num.trees=c(500),
                  mtry=NULL,
-                 cv_args=list(K=5, rep=1),
+                 cv_args=list(nfolds=5, rep=1),
                  ...) {
   if (!requireNamespace("ranger")) stop("Package 'ranger' required")
   formula <- as.formula(formula)
@@ -452,7 +455,7 @@ g_rf <- function(formula = ~.,
     res <- NULL; best <- 1
     if (length(ml)>1) {
       res <- tryCatch(targeted::cv(ml, data=data, perf=perf_ranger_prob,
-                               K=cv_args$K, rep=cv_args$rep),
+                               nfolds=cv_args$nfolds, rep=cv_args$rep),
                       error=function(...) NULL)
       best <- if (is.null(res)) 1 else which.min(summary(res))
     }
@@ -479,6 +482,7 @@ g_rf <- function(formula = ~.,
   return(g_rf)
 }
 
+#' @export
 predict.g_rf <- function(object, new_H, ...){
   model <- getElement(object, "model")
   design <- getElement(object, "design")
@@ -609,7 +613,7 @@ g_xgboost <- function(formula = ~.,
                       max_depth = 6,
                       eta = 0.3,
                       nthread = 1,
-                      cv_args=list(K=3, rep=1)) {
+                      cv_args=list(nfolds=3, rep=1)) {
   if (!requireNamespace("xgboost")) stop("Package 'xgboost' required")
   formula <- as.formula(formula)
   environment(formula) <- NULL
@@ -619,7 +623,7 @@ g_xgboost <- function(formula = ~.,
                  eta, nthread){
     targeted::ml_model$new(formula,
                            info = "xgBoost",
-                           fit = function(x, y) {
+                           estimate = function(x, y) {
                              xgboost::xgboost(
                                data = x, label = y,
                                objective = objective,
@@ -663,8 +667,9 @@ g_xgboost <- function(formula = ~.,
     # cross-validating models
     cv_res <- NULL
     if (length(ml_models)>1){
-      cv_res <- tryCatch(targeted::cv(ml_models, data, K=cv_args$K, rep = cv_args$rep),
-                         error = function(e) e)
+      cv_res <- tryCatch(targeted::cv(ml_models, data, K = cv_args$nfolds, rep = cv_args$rep),
+        error = function(e) e
+        )
       if (inherits(cv_res, "error")) {
         cv_res$message <-
           paste0(cv_res$message, " when calling 'g_xgboost' with formula:\n",
@@ -695,6 +700,7 @@ g_xgboost <- function(formula = ~.,
   return(g)
 }
 
+#' @export
 predict.g_xgboost <- function(object, new_H, ...){
   model <- getElement(object, "model")
   design <- getElement(object, "design")

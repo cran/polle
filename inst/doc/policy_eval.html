@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>policy_eval</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">
+
+div.csl-bib-body { }
+div.csl-entry {
+clear: both;
+margin-bottom: 0em;
+}
+.hanging div.csl-entry {
+margin-left:2em;
+text-indent:-2em;
+}
+div.csl-left-margin {
+min-width:2em;
+float:left;
+}
+div.csl-right-inline {
+margin-left:2em;
+padding-left:1em;
+}
+div.csl-indent {
+margin-left: 2em;
+}
+</style>
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">policy_eval</h1>
+
+
+<div id="TOC">
+<ul>
+<li><a href="#evaluating-a-user-defined-policy" id="toc-evaluating-a-user-defined-policy">Evaluating a user-defined
+policy</a></li>
+<li><a href="#evaluating-a-policy-learning-algorithm" id="toc-evaluating-a-policy-learning-algorithm">Evaluating a policy
+learning algorithm</a></li>
+<li><a href="#cross-fitting" id="toc-cross-fitting">Cross-fitting</a></li>
+<li><a href="#parallel-processing-via-future.apply" id="toc-parallel-processing-via-future.apply">Parallel processing via
+<code>future.apply</code></a></li>
+<li><a href="#sessioninfo" id="toc-sessioninfo">SessionInfo</a></li>
+<li><a href="#references" id="toc-references">References</a></li>
+</ul>
+</div>
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(polle)</span></code></pre></div>
+<p>This vignette is a guide to <code>policy_eval()</code> and some of
+the associated S3 methods. The purpose of <code>policy_eval</code> is to
+estimate (evaluate) the value of a user-defined policy or a policy
+learning algorithm. For details on the methodology, see the associated
+paper <span class="citation">(Nordland and Holst 2023)</span>.</p>
+<p>We consider a fixed two-stage problem as a general setup and simulate
+data using <code>sim_two_stage()</code> and create a
+<code>policy_data</code> object using <code>policy_data()</code>:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">sim_two_stage</span>(<span class="at">n =</span> <span class="fl">2e3</span>, <span class="at">seed =</span> <span class="dv">1</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>pd <span class="ot">&lt;-</span> <span class="fu">policy_data</span>(d,</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>                  <span class="at">action =</span> <span class="fu">c</span>(<span class="st">&quot;A_1&quot;</span>, <span class="st">&quot;A_2&quot;</span>),</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>                  <span class="at">baseline =</span> <span class="fu">c</span>(<span class="st">&quot;B&quot;</span>, <span class="st">&quot;BB&quot;</span>),</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>                  <span class="at">covariates =</span> <span class="fu">list</span>(<span class="at">L =</span> <span class="fu">c</span>(<span class="st">&quot;L_1&quot;</span>, <span class="st">&quot;L_2&quot;</span>),</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>                                    <span class="at">C =</span> <span class="fu">c</span>(<span class="st">&quot;C_1&quot;</span>, <span class="st">&quot;C_2&quot;</span>)),</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>                  <span class="at">utility =</span> <span class="fu">c</span>(<span class="st">&quot;U_1&quot;</span>, <span class="st">&quot;U_2&quot;</span>, <span class="st">&quot;U_3&quot;</span>))</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>pd</span></code></pre></div>
+<pre><code>## Policy data with n = 2000 observations and maximal K = 2 stages.
+## 
+##      action
+## stage    0    1    n
+##     1 1017  983 2000
+##     2  819 1181 2000
+## 
+## Baseline covariates: B, BB
+## State covariates: L, C
+## Average utility: 0.84</code></pre>
+<div id="evaluating-a-user-defined-policy" class="section level2">
+<h2>Evaluating a user-defined policy</h2>
+<p>User-defined policies are created using <code>policy_def()</code>. In
+this case we define a simple static policy always selecting action
+<code>&#39;1&#39;</code>:</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>p1 <span class="ot">&lt;-</span> <span class="fu">policy_def</span>(<span class="at">policy_functions =</span> <span class="st">&#39;1&#39;</span>, <span class="at">reuse =</span> <span class="cn">TRUE</span>, <span class="at">name =</span> <span class="st">&quot;A=1&quot;</span>)</span></code></pre></div>
+<p>As we want to apply the same policy function at both stages we set
+<code>reuse = TRUE</code>.</p>
+<p><code>policy_eval()</code> implements three types of policy
+evaluations: Inverse probability weighting estimation, outcome
+regression estimation, and doubly robust (DR) estimation. As doubly
+robust estimation is a combination of the two other types, we focus on
+this approach. For details on the implementation see Algorithm 1 in
+<span class="citation">(Nordland and Holst 2023)</span>.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>(pe1 <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(<span class="at">policy_data =</span> pd,</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>                    <span class="at">policy =</span> p1,</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>                    <span class="at">type =</span> <span class="st">&quot;dr&quot;</span>))</span></code></pre></div>
+<pre><code>##     Estimate Std.Err   2.5% 97.5%   P-value
+## A=1   0.8213  0.1115 0.6027  1.04 1.796e-13</code></pre>
+<p><code>policy_eval()</code> returns an object of type
+<code>policy_eval</code> which prints like a <code>lava::estimate</code>
+object. The policy value estimate and variance are available via
+<code>coef()</code> and <code>vcov()</code>:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">coef</span>(pe1)</span></code></pre></div>
+<pre><code>## [1] 0.8213233</code></pre>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">vcov</span>(pe1)</span></code></pre></div>
+<pre><code>##            [,1]
+## [1,] 0.01244225</code></pre>
+<div id="working-with-policy_eval-objects" class="section level3">
+<h3>Working with <code>policy_eval</code> objects</h3>
+<p>The <code>policy_eval</code> object behaves like an
+<code>lava::estimate</code> object, which can also be directly accessed
+using <code>estimate()</code>.</p>
+<p><code>estimate</code> objects makes it easy to work with estimates
+with an iid decomposition given by the influence curve/function, see the
+<a href="https://CRAN.R-project.org/package=lava/vignettes/influencefunction.html">estimate
+vignette</a>.</p>
+<p>The influence curve is available via <code>IC()</code>:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">IC</span>(pe1) <span class="sc">|&gt;</span> <span class="fu">head</span>()</span></code></pre></div>
+<pre><code>##            [,1]
+## [1,]  2.5515875
+## [2,] -5.6787782
+## [3,]  4.9506000
+## [4,]  2.0661524
+## [5,]  0.7939672
+## [6,] -2.2932160</code></pre>
+<p>Merging <code>estimate</code> objects allow the user to get inference
+for transformations of the estimates via the Delta method. Here we get
+inference for the average treatment effect, both as a difference and as
+a ratio:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>p0 <span class="ot">&lt;-</span> <span class="fu">policy_def</span>(<span class="at">policy_functions =</span> <span class="dv">0</span>, <span class="at">reuse =</span> <span class="cn">TRUE</span>, <span class="at">name =</span> <span class="st">&quot;A=0&quot;</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>pe0 <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(<span class="at">policy_data =</span> pd,</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>                   <span class="at">policy =</span> p0,</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>                   <span class="at">type =</span> <span class="st">&quot;dr&quot;</span>)</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a></span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>(est <span class="ot">&lt;-</span> <span class="fu">merge</span>(pe0, pe1))</span></code></pre></div>
+<pre><code>##     Estimate Std.Err    2.5%  97.5%   P-value
+## A=0 -0.06123  0.0881 -0.2339 0.1114 4.871e-01
+## ───                                          
+## A=1  0.82132  0.1115  0.6027 1.0399 1.796e-13</code></pre>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="fu">estimate</span>(est, <span class="cf">function</span>(x) x[<span class="dv">2</span>]<span class="sc">-</span>x[<span class="dv">1</span>], <span class="at">labels=</span><span class="st">&quot;ATE-difference&quot;</span>)</span></code></pre></div>
+<pre><code>##                Estimate Std.Err   2.5% 97.5%  P-value
+## ATE-difference   0.8825  0.1338 0.6203 1.145 4.25e-11</code></pre>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">estimate</span>(est, <span class="cf">function</span>(x) x[<span class="dv">2</span>]<span class="sc">/</span>x[<span class="dv">1</span>], <span class="at">labels=</span><span class="st">&quot;ATE-ratio&quot;</span>)</span></code></pre></div>
+<pre><code>##           Estimate Std.Err   2.5% 97.5% P-value
+## ATE-ratio   -13.41    19.6 -51.83    25  0.4937</code></pre>
+</div>
+<div id="nuisance-models" class="section level3">
+<h3>Nuisance models</h3>
+<p>So far we have relied on the default generalized linear models for
+the nuisance g-models and Q-models. As default, a single g-model trained
+across all stages using the state/Markov type history, see the
+<code>policy_data</code> vignette. Use <code>get_g_functions()</code> to
+get access to the fitted model:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a>(gf <span class="ot">&lt;-</span> <span class="fu">get_g_functions</span>(pe1))</span></code></pre></div>
+<pre><code>## $all_stages
+## $model
+## 
+## Call:  NULL
+## 
+## Coefficients:
+## (Intercept)            L            C            B     BBgroup2     BBgroup3  
+##     0.08285      0.03094      0.97993     -0.05753     -0.13970     -0.06122  
+## 
+## Degrees of Freedom: 3999 Total (i.e. Null);  3994 Residual
+## Null Deviance:       5518 
+## Residual Deviance: 4356  AIC: 4368
+## 
+## 
+## attr(,&quot;full_history&quot;)
+## [1] FALSE</code></pre>
+<p>The g-functions can be used as input to a new policy evaluation:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a><span class="fu">policy_eval</span>(<span class="at">policy_data =</span> pd,</span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a>            <span class="at">g_functions =</span> gf,</span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a>            <span class="at">policy =</span> p0,</span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a>            <span class="at">type =</span> <span class="st">&quot;dr&quot;</span>)</span></code></pre></div>
+<pre><code>##     Estimate Std.Err    2.5%  97.5% P-value
+## A=0 -0.06123  0.0881 -0.2339 0.1114  0.4871</code></pre>
+<p>or we can get the associated predicted values:</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" tabindex="-1"></a><span class="fu">predict</span>(gf, <span class="at">new_policy_data =</span> pd) <span class="sc">|&gt;</span> <span class="fu">head</span>(<span class="dv">6</span>)</span></code></pre></div>
+<pre><code>## Key: &lt;id, stage&gt;
+##       id stage        g_0        g_1
+##    &lt;int&gt; &lt;int&gt;      &lt;num&gt;      &lt;num&gt;
+## 1:     1     1 0.15628741 0.84371259
+## 2:     1     2 0.08850558 0.91149442
+## 3:     2     1 0.92994454 0.07005546
+## 4:     2     2 0.92580890 0.07419110
+## 5:     3     1 0.11184451 0.88815549
+## 6:     3     2 0.08082666 0.91917334</code></pre>
+<p>Similarly, we can inspect the Q-functions using
+<code>get_q_functions()</code>:</p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a><span class="fu">get_q_functions</span>(pe1)</span></code></pre></div>
+<pre><code>## $stage_1
+## $model
+## 
+## Call:  NULL
+## 
+## Coefficients:
+## (Intercept)           A1            L            C            B     BBgroup2  
+##    0.232506     0.682422     0.454642     0.039021    -0.070152    -0.184704  
+##    BBgroup3         A1:L         A1:C         A1:B  A1:BBgroup2  A1:BBgroup3  
+##   -0.171734    -0.010746     0.938791     0.003772     0.157200     0.270711  
+## 
+## Degrees of Freedom: 1999 Total (i.e. Null);  1988 Residual
+## Null Deviance:       7689 
+## Residual Deviance: 3599  AIC: 6877
+## 
+## 
+## $stage_2
+## $model
+## 
+## Call:  NULL
+## 
+## Coefficients:
+## (Intercept)           A1            L            C            B     BBgroup2  
+##   -0.043324     0.147356     0.002376    -0.042036     0.005331    -0.001128  
+##    BBgroup3         A1:L         A1:C         A1:B  A1:BBgroup2  A1:BBgroup3  
+##   -0.108404     0.024424     0.962591    -0.059177    -0.102084     0.094688  
+## 
+## Degrees of Freedom: 1999 Total (i.e. Null);  1988 Residual
+## Null Deviance:       3580 
+## Residual Deviance: 1890  AIC: 5588
+## 
+## 
+## attr(,&quot;full_history&quot;)
+## [1] FALSE</code></pre>
+<p>Note that a model is trained for each stage. Again, we can predict
+from the Q-models using <code>predict()</code>.</p>
+<p>Usually, we want to specify the nuisance models ourselves using the
+<code>g_models</code> and <code>q_models</code> arguments:</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a>pe1 <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(pd,</span>
+<span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a>            <span class="at">policy =</span> p1,</span>
+<span id="cb27-3"><a href="#cb27-3" tabindex="-1"></a>            <span class="at">g_models =</span> <span class="fu">list</span>(</span>
+<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a>              <span class="fu">g_sl</span>(<span class="at">formula =</span> <span class="sc">~</span> BB <span class="sc">+</span> L_1, <span class="at">SL.library =</span> <span class="fu">c</span>(<span class="st">&quot;SL.glm&quot;</span>, <span class="st">&quot;SL.ranger&quot;</span>)),</span>
+<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a>              <span class="fu">g_sl</span>(<span class="at">formula =</span> <span class="sc">~</span> BB <span class="sc">+</span> L_1 <span class="sc">+</span> C_2, <span class="at">SL.library =</span> <span class="fu">c</span>(<span class="st">&quot;SL.glm&quot;</span>, <span class="st">&quot;SL.ranger&quot;</span>))</span>
+<span id="cb27-6"><a href="#cb27-6" tabindex="-1"></a>            ),</span>
+<span id="cb27-7"><a href="#cb27-7" tabindex="-1"></a>            <span class="at">g_full_history =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a>            <span class="at">q_models =</span> <span class="fu">list</span>(</span>
+<span id="cb27-9"><a href="#cb27-9" tabindex="-1"></a>              <span class="fu">q_glm</span>(<span class="at">formula =</span> <span class="sc">~</span> A <span class="sc">*</span> (B <span class="sc">+</span> C_1)), <span class="co"># including action interactions</span></span>
+<span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a>              <span class="fu">q_glm</span>(<span class="at">formula =</span> <span class="sc">~</span> A <span class="sc">*</span> (B <span class="sc">+</span> C_1 <span class="sc">+</span> C_2)) <span class="co"># including action interactions</span></span>
+<span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a>            ),</span>
+<span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a>            <span class="at">q_full_history =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
+<pre><code>## Loading required namespace: ranger</code></pre>
+<p>Here we train a super learner g-model for each stage using the full
+available history and a generalized linear model for the Q-models. The
+<code>formula</code> argument is used to construct the model frame
+passed to the model for training (and prediction). The valid formula
+terms depending on <code>g_full_history</code> and
+<code>q_full_history</code> are available via
+<code>get_history_names()</code>:</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" tabindex="-1"></a><span class="fu">get_history_names</span>(pd) <span class="co"># state/Markov history</span></span></code></pre></div>
+<pre><code>## [1] &quot;L&quot;  &quot;C&quot;  &quot;B&quot;  &quot;BB&quot;</code></pre>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" tabindex="-1"></a><span class="fu">get_history_names</span>(pd, <span class="at">stage =</span> <span class="dv">1</span>) <span class="co"># full history</span></span></code></pre></div>
+<pre><code>## [1] &quot;L_1&quot; &quot;C_1&quot; &quot;B&quot;   &quot;BB&quot;</code></pre>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" tabindex="-1"></a><span class="fu">get_history_names</span>(pd, <span class="at">stage =</span> <span class="dv">2</span>) <span class="co"># full history</span></span></code></pre></div>
+<pre><code>## [1] &quot;A_1&quot; &quot;L_1&quot; &quot;L_2&quot; &quot;C_1&quot; &quot;C_2&quot; &quot;B&quot;   &quot;BB&quot;</code></pre>
+<p>Remember that the action variable at the current stage is always
+named <code>A</code>. Some models like <code>glm</code> require
+interactions to be specified via the model frame. Thus, for some models,
+it is important to include action interaction terms for the
+Q-models.</p>
+</div>
+</div>
+<div id="evaluating-a-policy-learning-algorithm" class="section level2">
+<h2>Evaluating a policy learning algorithm</h2>
+<p>The value of a learned policy is an important performance measure,
+and <code>policy_eval()</code> allow for direct evaluation of a given
+policy learning algorithm. For details, see Algorithm 4 in <span class="citation">(Nordland and Holst 2023)</span>.</p>
+<p>In <code>polle</code>, policy learning algorithms are specified using
+<code>policy_learn()</code>, see the associated vignette. These
+functions can be directly evaluated in <code>policy_eval()</code>:</p>
+<div class="sourceCode" id="cb35"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb35-1"><a href="#cb35-1" tabindex="-1"></a><span class="fu">policy_eval</span>(pd,</span>
+<span id="cb35-2"><a href="#cb35-2" tabindex="-1"></a>            <span class="at">policy_learn =</span> <span class="fu">policy_learn</span>(<span class="at">type =</span> <span class="st">&quot;ql&quot;</span>))</span></code></pre></div>
+<pre><code>##    Estimate Std.Err  2.5% 97.5%   P-value
+## ql    1.306 0.06641 1.176 1.437 3.783e-86</code></pre>
+<p>In the above example we evaluate the policy estimated via Q-learning.
+Alternatively, we can first learn the policy and then pass it to
+<code>policy_eval()</code>:</p>
+<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb37-1"><a href="#cb37-1" tabindex="-1"></a>p_ql <span class="ot">&lt;-</span> <span class="fu">policy_learn</span>(<span class="at">type =</span> <span class="st">&quot;ql&quot;</span>)(pd, <span class="at">q_models =</span> <span class="fu">q_glm</span>())</span>
+<span id="cb37-2"><a href="#cb37-2" tabindex="-1"></a><span class="fu">policy_eval</span>(pd,</span>
+<span id="cb37-3"><a href="#cb37-3" tabindex="-1"></a>            <span class="at">policy =</span> <span class="fu">get_policy</span>(p_ql))</span></code></pre></div>
+<pre><code>##    Estimate Std.Err  2.5% 97.5%   P-value
+## ql    1.306 0.06641 1.176 1.437 3.783e-86</code></pre>
+</div>
+<div id="cross-fitting" class="section level2">
+<h2>Cross-fitting</h2>
+<p>A key feature of <code>policy_eval()</code> is that it allows for
+easy cross-fitting of the nuisance models as well the learned policy.
+Here we specify two-fold cross-fitting via the <code>M</code>
+argument:</p>
+<div class="sourceCode" id="cb39"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb39-1"><a href="#cb39-1" tabindex="-1"></a>pe_cf <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(pd,</span>
+<span id="cb39-2"><a href="#cb39-2" tabindex="-1"></a>                     <span class="at">policy_learn =</span> <span class="fu">policy_learn</span>(<span class="at">type =</span> <span class="st">&quot;ql&quot;</span>),</span>
+<span id="cb39-3"><a href="#cb39-3" tabindex="-1"></a>                     <span class="at">M =</span> <span class="dv">2</span>)</span></code></pre></div>
+<p>Specifically, both the nuisance models and the optimal policy are
+fitted on each training fold. Subsequently, the doubly robust value
+score is calculated on the validation folds.</p>
+<p>The <code>policy_eval</code> object now consists of a list of
+<code>policy_eval</code> objects associated with each fold:</p>
+<div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" tabindex="-1"></a>pe_cf<span class="sc">$</span>folds<span class="sc">$</span>fold_1 <span class="sc">|&gt;</span> <span class="fu">head</span>()</span></code></pre></div>
+<pre><code>## [1]  3  4  5  7  8 10</code></pre>
+<div class="sourceCode" id="cb42"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" tabindex="-1"></a>pe_cf<span class="sc">$</span>cross_fits<span class="sc">$</span>fold_1</span></code></pre></div>
+<pre><code>##      Estimate Std.Err  2.5% 97.5%   P-value
+## [1,]    1.261 0.09456 1.075 1.446 1.538e-40</code></pre>
+<p>In order to save memory, particularly when cross-fitting, it is
+possible not to save the nuisance models via the
+<code>save_g_functions</code> and <code>save_q_functions</code>
+arguments.</p>
+</div>
+<div id="parallel-processing-via-future.apply" class="section level2">
+<h2>Parallel processing via <code>future.apply</code></h2>
+<p>It is easy to parallelize the cross-fitting procedure via the
+<code>future.apply</code> package:</p>
+<div class="sourceCode" id="cb44"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb44-1"><a href="#cb44-1" tabindex="-1"></a><span class="fu">library</span>(future.apply)</span>
+<span id="cb44-2"><a href="#cb44-2" tabindex="-1"></a><span class="fu">plan</span>(<span class="st">&quot;multisession&quot;</span>) <span class="co"># local parallel procession</span></span>
+<span id="cb44-3"><a href="#cb44-3" tabindex="-1"></a><span class="fu">library</span>(<span class="st">&quot;progressr&quot;</span>) <span class="co"># progress bar</span></span>
+<span id="cb44-4"><a href="#cb44-4" tabindex="-1"></a><span class="fu">handlers</span>(<span class="at">global =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb44-5"><a href="#cb44-5" tabindex="-1"></a></span>
+<span id="cb44-6"><a href="#cb44-6" tabindex="-1"></a><span class="fu">policy_eval</span>(pd,</span>
+<span id="cb44-7"><a href="#cb44-7" tabindex="-1"></a>            <span class="at">policy_learn =</span> <span class="fu">policy_learn</span>(<span class="at">type =</span> <span class="st">&quot;ql&quot;</span>),</span>
+<span id="cb44-8"><a href="#cb44-8" tabindex="-1"></a>            <span class="at">q_models =</span> <span class="fu">q_rf</span>(),</span>
+<span id="cb44-9"><a href="#cb44-9" tabindex="-1"></a>            <span class="at">M =</span> <span class="dv">20</span>)</span>
+<span id="cb44-10"><a href="#cb44-10" tabindex="-1"></a></span>
+<span id="cb44-11"><a href="#cb44-11" tabindex="-1"></a><span class="fu">plan</span>(<span class="st">&quot;sequential&quot;</span>) <span class="co"># resetting to sequential processing</span></span></code></pre></div>
+</div>
+<div id="sessioninfo" class="section level1">
+<h1>SessionInfo</h1>
+<div class="sourceCode" id="cb45"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb45-1"><a href="#cb45-1" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span></code></pre></div>
+<pre><code>## R version 4.3.2 (2023-10-31)
+## Platform: aarch64-apple-darwin22.6.0 (64-bit)
+## Running under: macOS Sonoma 14.4.1
+## 
+## Matrix products: default
+## BLAS:   /Users/oano/.asdf/installs/R/4.3.2/lib/R/lib/libRblas.dylib 
+## LAPACK: /Users/oano/.asdf/installs/R/4.3.2/lib/R/lib/libRlapack.dylib;  LAPACK version 3.11.0
+## 
+## locale:
+## [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+## 
+## time zone: Europe/Copenhagen
+## tzcode source: internal
+## 
+## attached base packages:
+## [1] splines   stats     graphics  grDevices utils     datasets  methods  
+## [8] base     
+## 
+## other attached packages:
+## [1] polle_1.4           SuperLearner_2.0-29 gam_1.22-3         
+## [4] foreach_1.5.2       nnls_1.5           
+## 
+## loaded via a namespace (and not attached):
+##  [1] Matrix_1.6-1.1      future.apply_1.11.2 jsonlite_1.8.8     
+##  [4] ranger_0.16.0       compiler_4.3.2      Rcpp_1.0.12        
+##  [7] parallel_4.3.2      jquerylib_0.1.4     globals_0.16.3     
+## [10] yaml_2.3.7          fastmap_1.1.1       lattice_0.21-9     
+## [13] R6_2.5.1            knitr_1.45          iterators_1.0.14   
+## [16] future_1.33.2       bslib_0.5.1         rlang_1.1.3        
+## [19] cachem_1.0.8        xfun_0.41           sass_0.4.7         
+## [22] cli_3.6.2           progressr_0.14.0    digest_0.6.35      
+## [25] grid_4.3.2          mvtnorm_1.2-4       lava_1.8.0         
+## [28] timereg_2.0.5       evaluate_0.23       data.table_1.15.4  
+## [31] numDeriv_2016.8-1.1 listenv_0.9.1       codetools_0.2-19   
+## [34] survival_3.5-7      parallelly_1.37.1   rmarkdown_2.25     
+## [37] tools_4.3.2         htmltools_0.5.7     mets_1.3.4</code></pre>
+</div>
+<div id="references" class="section level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent" entry-spacing="0">
+<div id="ref-nordland2023policy" class="csl-entry">
+Nordland, Andreas, and Klaus K. Holst. 2023. <span>“Policy Learning with
+the Polle Package.”</span> <a href="https://doi.org/10.48550/arXiv.2212.02335">https://doi.org/10.48550/arXiv.2212.02335</a>.
+</div>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

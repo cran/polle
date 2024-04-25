@@ -26,55 +26,55 @@ policy_learn(
 \arguments{
 \item{type}{Type of policy learner method:
 \itemize{
-\item{} \code{"ql"}: Quality/Q-learning.
-\item{} \code{"drql"}: Doubly Robust Q-learning.
-\item{} \code{"blip"}: Doubly Robust blip-learning (only for dichotomous actions).
-\item{} \code{"ptl"}: Policy Tree Learning.
-\item{} \code{"owl"}: Outcome Weighted Learning.
-\item{} \code{"earl"}: Efficient Augmentation and Relaxation Learning (only single stage).
-\item{} \code{"rwl"}: Residual Weighted Learning (only single stage).
+\item \code{"ql"}: Quality/Q-learning.
+\item \code{"drql"}: Doubly Robust Q-learning.
+\item \code{"blip"}: Doubly Robust blip-learning (only for dichotomous actions).
+\item \code{"ptl"}: Policy Tree Learning.
+\item \code{"owl"}: Outcome Weighted Learning.
+\item \code{"earl"}: Efficient Augmentation and Relaxation Learning (only single stage).
+\item \code{"rwl"}: Residual Weighted Learning (only single stage).
 }}
 
 \item{control}{List of control arguments. Values (and default values) are set using
 \code{control_{type}()}. Key arguments include:\cr
 \code{\link[=control_drql]{control_drql()}}:\cr
 \itemize{
-\item{} \code{qv_models}: Single element or list of V-restricted Q-models created
+\item \code{qv_models}: Single element or list of V-restricted Q-models created
 by \code{\link[=q_glm]{q_glm()}}, \code{\link[=q_rf]{q_rf()}}, \code{\link[=q_sl]{q_sl()}} or similar functions.
 }
 \code{\link[=control_blip]{control_blip()}}:\cr
 \itemize{
-\item{} \code{blip_models}: Single element or list of V-restricted blip-models created
+\item \code{blip_models}: Single element or list of V-restricted blip-models created
 by \code{\link[=q_glm]{q_glm()}}, \code{\link[=q_rf]{q_rf()}}, \code{\link[=q_sl]{q_sl()}} or similar functions.
 }
 \code{\link[=control_ptl]{control_ptl()}}: \cr
 \itemize{
-\item{} \code{policy_vars}: Character vector/string or list of character
+\item \code{policy_vars}: Character vector/string or list of character
 vectors/strings. Variable names used to construct the V-restricted policy tree.
 The names must be a subset of the history names, see get_history_names().
-\item{} \code{hybrid}: If \code{TRUE}, \code{\link[policytree:hybrid_policy_tree]{policytree::hybrid_policy_tree()}} is used to
+\item \code{hybrid}: If \code{TRUE}, \code{\link[policytree:hybrid_policy_tree]{policytree::hybrid_policy_tree()}} is used to
 fit a policy tree.
-\item{} \code{depth}: Integer or integer vector. The depth of the fitted policy
+\item \code{depth}: Integer or integer vector. The depth of the fitted policy
 tree for each stage.
 }
 \code{\link[=control_owl]{control_owl()}}: \cr
 \itemize{
-\item{} \code{policy_vars}: As in \code{control_ptl()}.
-\item{} \code{loss}: Loss function. The options are \code{"hinge"}, \code{"ramp"},
+\item \code{policy_vars}: As in \code{control_ptl()}.
+\item \code{loss}: Loss function. The options are \code{"hinge"}, \code{"ramp"},
 \code{"logit"}, \code{"logit.lasso"}, \code{"l2"}, \code{"l2.lasso"}.
-\item{} \code{kernel}: Type of kernel used by the support vector machine. The
+\item \code{kernel}: Type of kernel used by the support vector machine. The
 options are \code{"linear"}, \code{"rbf"}.
-\item{} \code{augment}:  If \code{TRUE} the outcomes are augmented.
+\item \code{augment}:  If \code{TRUE} the outcomes are augmented.
 }
 \code{\link[=control_earl]{control_earl()}}/\code{\link[=control_rwl]{control_rwl()}}: \cr
 \itemize{
-\item{} \code{moPropen}: Propensity model of class "ModelObj", see \link[modelObj:modelObj]{modelObj::modelObj}.
-\item{} \code{moMain}: Main effects outcome model of class "ModelObj".
-\item{} \code{moCont} Contrast outcome model of class "ModelObj".
-\item{} \code{regime}: An object of class \link{formula} specifying the design of the policy.
-\item{} \code{surrogate}: The surrogate 0-1 loss function. The options are
+\item \code{moPropen}: Propensity model of class "ModelObj", see \link[modelObj:modelObj]{modelObj::modelObj}.
+\item \code{moMain}: Main effects outcome model of class "ModelObj".
+\item \code{moCont} Contrast outcome model of class "ModelObj".
+\item \code{regime}: An object of class \link{formula} specifying the design of the policy.
+\item \code{surrogate}: The surrogate 0-1 loss function. The options are
 \code{"logit"}, \code{"exp"}, \code{"hinge"}, \code{"sqhinge"}, \code{"huber"}.
-\item{} \code{kernel}: The options are \code{"linear"}, \code{"poly"}, \code{"radial"}.
+\item \code{kernel}: The options are \code{"linear"}, \code{"poly"}, \code{"radial"}.
 }}
 
 \item{alpha}{Probability threshold for determining realistic actions.}
@@ -125,7 +125,7 @@ learning and outcome weighted learning). Evaluating the policy learner returns a
 
 The following S3 generic functions are available for an object of
 class "policy_object":
-\itemize{
+\describe{
 \item{\code{\link[=get_g_functions]{get_g_functions()}}}{ Extract the fitted g-functions.}
 \item{\code{\link[=get_q_functions]{get_q_functions()}}}{ Extract the fitted Q-functions.}
 \item{\code{\link[=get_policy]{get_policy()}}}{ Extract the fitted policy object.}
