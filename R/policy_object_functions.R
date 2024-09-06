@@ -54,52 +54,64 @@ get_policy_object.policy_eval <- function(object){
 #' or a policy evaluation object The policy is a function which take a
 #' policy data object as input and returns the policy actions.
 #' @param object Object of class [policy_object] or [policy_eval].
+#' @param threshold Numeric vector.
+#' Thresholds for the first stage policy function.
 #' @returns function of class [policy].
 #' @examples
 #' library("polle")
 #' ### Two stages:
-#' d <- sim_two_stage(5e2, seed=1)
+#' d <- sim_two_stage(5e2, seed = 1)
 #' pd <- policy_data(d,
-#'                   action = c("A_1", "A_2"),
-#'                   baseline = c("BB"),
-#'                   covariates = list(L = c("L_1", "L_2"),
-#'                                     C = c("C_1", "C_2")),
-#'                   utility = c("U_1", "U_2", "U_3"))
+#'   action = c("A_1", "A_2"),
+#'   baseline = c("BB"),
+#'   covariates = list(
+#'     L = c("L_1", "L_2"),
+#'     C = c("C_1", "C_2")
+#'   ),
+#'   utility = c("U_1", "U_2", "U_3")
+#' )
 #' pd
 #'
 #' ### V-restricted (Doubly Robust) Q-learning
 #'
 #' # specifying the learner:
-#' pl <- policy_learn(type = "drql",
-#'                    control = control_drql(qv_models = q_glm(formula = ~ C)))
+#' pl <- policy_learn(
+#'   type = "drql",
+#'   control = control_drql(qv_models = q_glm(formula = ~C))
+#' )
 #'
 #' # fitting the policy (object):
-#' po <- pl(policy_data = pd,
-#'          q_models = q_glm(),
-#'          g_models = g_glm())
+#' po <- pl(
+#'   policy_data = pd,
+#'   q_models = q_glm(),
+#'   g_models = g_glm()
+#' )
 #'
 #' # getting and applying the policy:
 #' head(get_policy(po)(pd))
 #'
 #' # the policy learner can also be evaluated directly:
-#' pe <- policy_eval(policy_data = pd,
-#'                   policy_learn = pl,
-#'                   q_models = q_glm(),
-#'                   g_models = g_glm())
+#' pe <- policy_eval(
+#'   policy_data = pd,
+#'   policy_learn = pl,
+#'   q_models = q_glm(),
+#'   g_models = g_glm()
+#' )
 #'
 #' # getting and applying the policy again:
 #' head(get_policy(pe)(pd))
 #' @export
-get_policy <- function(object){
+get_policy <- function(object, threshold = NULL) {
   UseMethod("get_policy")
 }
 
 #' @export
-get_policy.policy_eval <- function(object){
+get_policy.policy_eval <- function(object, threshold = NULL) {
   po <- get_policy_object(object)
-  if (is.null(po))
+  if (is.null(po)) {
     return(NULL)
-  p <- get_policy(po)
+  }
+  p <- get_policy(po, threshold = threshold)
   return(p)
 }
 
@@ -112,11 +124,13 @@ get_policy.policy_eval <- function(object){
 #' @param object Object of class "policy_object" or "policy_eval",
 #' see [policy_learn] and [policy_eval].
 #' @param stage Integer. Stage number.
-#' @param include_g_values If TRUE, the g-values are included as an attribute.
+#' @param threshold  Numeric, threshold for not
+#' choosing the reference action at stage 1.
 #' @param ... Additional arguments.
+#' @param include_g_values If TRUE, the g-values are included as an attribute.
 #' @returns Functions with arguments:
 #' \describe{
-#' \item{\code{H}}{[data.table] containing the variables needed to evaluate the policy (and g-function).}
+#' \item{\code{H}}{[data.table::data.table] containing the variables needed to evaluate the policy (and g-function).}
 #' }
 #' @examples
 #' library("polle")
@@ -158,16 +172,26 @@ get_policy.policy_eval <- function(object){
 #' d2 <- pf2(H = new_H)
 #' head(d2)
 #' @export
-get_policy_functions <- function(object, stage, ...){
+get_policy_functions <- function(object, stage, threshold, ...) {
   UseMethod("get_policy_functions")
 }
 
 #' @export
-get_g_functions.policy_object <- function(object){
+get_g_functions.policy_object <- function(object) {
   getElement(object, "g_functions")
 }
 
 #' @export
-get_q_functions.policy_object <- function(object){
+get_q_functions.policy_object <- function(object) {
   getElement(object, "q_functions")
+}
+
+check_stage <- function(stage, K) {
+  if (missing(stage)) {
+    stop("stage argument is missing.")
+  }
+  is_int <- stage %% 1 == 0
+  if (!(is_int && (length(stage) == 1) && (stage >= 1) && (stage <= K))) {
+    stop("stage must be a positive integer less than or equal to K.")
+  }
 }

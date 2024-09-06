@@ -38,7 +38,7 @@ test_that("get_policy.drql returns a policy", {
 
 })
 
-test_that("policy_learn with type = 'drql' checks input",{
+test_that("policy_learn with type = 'drql' checks input", {
   d <- sim_two_stage(200, seed=1)
 
   pd <- policy_data(d,
@@ -74,20 +74,29 @@ test_that("policy_learn with type = 'drql' checks input",{
 
 })
 
-test_that("policy_learn with type drql works as intended",{
-  d <- sim_two_stage(200, seed=1)
+test_that("policy_learn with type drql works as intended", {
+  d <- sim_two_stage(200, seed = 1)
 
   pd <- policy_data(d,
-                    action = c("A_1", "A_2"),
-                    baseline = c("BB", "B"),
-                    covariates = list(L = c("L_1", "L_2"),
-                                      C = c("C_1", "C_2")),
-                    utility = c("U_1", "U_2", "U_3"))
+    action = c("A_1", "A_2"),
+    baseline = c("BB", "B"),
+    covariates = list(
+      L = c("L_1", "L_2"),
+      C = c("C_1", "C_2")
+    ),
+    utility = c("U_1", "U_2", "U_3")
+  )
 
-  qv <- policy_learn(type = "drql",
-                     control = control_drql())
+  qv <- policy_learn(
+    type = "drql",
+    control = control_drql()
+  )
   gfun <- fit_g_functions(pd, g_models = g_glm(), full_history = FALSE)
-  gfun2 <- fit_g_functions(pd, g_models = list(g_glm(), g_glm()), full_history = FALSE)
+  gfun2 <- fit_g_functions(
+    pd,
+    g_models = list(g_glm(), g_glm()),
+    full_history = FALSE
+  )
 
   expect_error(
     qv(policy_data = pd, g_models = g_glm(), q_models = q_glm()),
@@ -102,52 +111,65 @@ test_that("policy_learn with type drql works as intended",{
     NA
   )
   expect_error(
-    policy_eval(policy_data = pd,policy_learn = qv),
+    policy_eval(policy_data = pd, policy_learn = qv),
     NA
   )
   expect_error(
-    policy_eval(policy_data = pd,policy_learn = qv, g_functions = gfun),
+    policy_eval(policy_data = pd, policy_learn = qv, g_functions = gfun),
     NA
   )
   expect_error(
-    policy_eval(policy_data = pd,policy_learn = qv,g_functions = gfun2),
+    policy_eval(policy_data = pd, policy_learn = qv, g_functions = gfun2),
     NA
   )
 
-  qv <- policy_learn(type = "drql",
-                     control = control_drql(qv_models = q_glm(formula = Y ~ .)))
+  qv <- policy_learn(
+    type = "drql",
+    control = control_drql(qv_models = q_glm(formula = Y ~ .))
+  )
   expect_error(
     policy_eval(policy_data = pd, policy_learn = qv),
     NA
   )
 
-  qv <- policy_learn(type = "drql",
-                     control = control_drql(qv_models = q_glm(formula = Y ~ BB)))
+  qv <- policy_learn(
+    type = "drql",
+    control = control_drql(qv_models = q_glm(formula = Y ~ BB))
+  )
+
   expect_error(
     policy_eval(policy_data = pd, policy_learn = qv),
     NA
   )
 
-  qv <- policy_learn(type = "drql",
-                     control = control_drql(qv_models = q_glm(formula = ~ X)))
+  qv <- policy_learn(
+    type = "drql",
+    control = control_drql(qv_models = q_glm(formula = ~X))
+  )
+
   expect_error(
-    policy_eval(policy_data = pd,policy_learn = qv),
+    policy_eval(policy_data = pd, policy_learn = qv),
     "object 'X' not found when calling 'q_glm' with formula:
 V_res ~ X"
   )
 
-  qv <- policy_learn(type = "drql",
-                     control = control_drql(qv_models = q_glm(formula = Y ~ X)))
+  qv <- policy_learn(
+    type = "drql",
+    control = control_drql(qv_models = q_glm(formula = Y ~ X))
+  )
   expect_error(
-    policy_eval(policy_data = pd,policy_learn = qv),
+    policy_eval(policy_data = pd, policy_learn = qv),
     "object 'X' not found when calling 'q_glm' with formula:
 V_res ~ X"
   )
 
   # q_glm formula default is A * (.), and A is not used when fitting the
   # QV-model.
-  qv <- policy_learn(type = "drql",
-                     control = control_drql(qv_models = q_glm()))
+  qv <- policy_learn(
+    type = "drql",
+    control = control_drql(qv_models = q_glm())
+  )
+
   expect_error(
     policy_eval(policy_data = pd, policy_learn = qv),
     "object 'A' not found when calling 'q_glm' with formula:
@@ -155,7 +177,7 @@ V_res ~ A \\+ L \\+ C \\+ BB \\+ B \\+ A:L \\+ A:C \\+ A:BB \\+ A:B"
   )
 })
 
-test_that("policy_learn with type drql handles varying action sets",{
+test_that("policy_learn with type drql handles varying action sets", {
   d <- sim_two_stage_multi_actions(n = 1e2)
   pd <- policy_data(data = d,
                     action = c("A_1", "A_2"),
@@ -317,78 +339,95 @@ test_that("policy_learn with type drql handles varying action sets",{
 
 })
 
-test_that("policy_learn with type = 'drql' works with cross_fit_g_models.",{
+test_that("policy_learn with type = 'drql' works with cross_fit_g_models.", {
   d <- sim_two_stage_multi_actions(n = 1e2)
-  pd <- policy_data(data = d,
-                    action = c("A_1", "A_2"),
-                    baseline = c("B", "BB"),
-                    covariates = list(L = c("L_1", "L_2"),
-                                      C = c("C_1", "C_2")),
-                    utility = c("U_1", "U_2", "U_3"))
+  pd <- policy_data(
+    data = d,
+    action = c("A_1", "A_2"),
+    baseline = c("B", "BB"),
+    covariates = list(
+      L = c("L_1", "L_2"),
+      C = c("C_1", "C_2")
+    ),
+    utility = c("U_1", "U_2", "U_3")
+  )
 
-  pl <- policy_learn(type = "drql",
-                     cross_fit_g_models = FALSE,
-                     L = 2,
-                     alpha = 0.1,
-                     control = control_drql())
+  pl <- policy_learn(
+    type = "drql",
+    cross_fit_g_models = FALSE,
+    L = 2,
+    alpha = 0.1,
+    control = control_drql()
+  )
 
   gfun <- fit_g_functions(pd,
-                          list(g_empir(), g_empir()),
-                          full_history = FALSE)
+    list(g_empir(), g_empir()),
+    full_history = FALSE
+  )
 
   po <- pl(pd,
-           g_models = list(g_empir(), g_empir()),
-           q_models = q_glm())
+    g_models = list(g_empir(), g_empir()),
+    q_models = q_glm()
+  )
 
   expect_equal(
     po$g_functions,
     gfun
   )
-
 })
 
 
-test_that("policy_learn with type = 'drql' saves cross-fitted models.",{
-  d <- sim_two_stage(n = 1e2)
-  pd <- policy_data(data = d,
-                    action = c("A_1", "A_2"),
-                    baseline = c("B", "BB"),
-                    covariates = list(L = c("L_1", "L_2"),
-                                      C = c("C_1", "C_2")),
-                    utility = c("U_1", "U_2", "U_3"))
 
-  pl <- policy_learn(type = "drql",
-                     cross_fit_g_models = FALSE,
-                     L = 2,
-                     alpha = 0.1,
-                     save_cross_fit_models = FALSE,
-                     control = control_drql())
+test_that("policy_learn with type = 'drql' saves cross-fitted models.", {
+  d <- sim_two_stage(n = 1e2)
+  pd <- policy_data(
+    data = d,
+    action = c("A_1", "A_2"),
+    baseline = c("B", "BB"),
+    covariates = list(
+      L = c("L_1", "L_2"),
+      C = c("C_1", "C_2")
+    ),
+    utility = c("U_1", "U_2", "U_3")
+  )
+
+  pl <- policy_learn(
+    type = "drql",
+    cross_fit_g_models = FALSE,
+    L = 2,
+    alpha = 0.1,
+    save_cross_fit_models = FALSE,
+    control = control_drql()
+  )
 
   po <- pl(pd,
-           g_models = list(g_empir(), g_empir()),
-           q_models = q_glm())
+    g_models = list(g_empir(), g_empir()),
+    q_models = q_glm()
+  )
 
   expect_true(
     is.null(unlist(po$q_functions_cf))
   )
 
-  pl <- policy_learn(type = "drql",
-                     cross_fit_g_models = FALSE,
-                     L = 2,
-                     alpha = 0.1,
-                     save_cross_fit_models = TRUE,
-                     control = control_drql())
+  pl <- policy_learn(
+    type = "drql",
+    cross_fit_g_models = FALSE,
+    L = 2,
+    alpha = 0.1,
+    save_cross_fit_models = TRUE,
+    control = control_drql()
+  )
 
   po <- pl(pd,
-           g_models = list(g_empir(), g_empir()),
-           q_models = q_glm())
+    g_models = list(g_empir(), g_empir()),
+    q_models = q_glm()
+  )
 
   expect_true(
     !is.null(unlist(po$q_functions_cf))
   )
-
-
 })
+
 
 test_that("policy_learn with type drql handles multiple stages with varying stage action sets",{
   d <- sim_multi_stage(300, seed = 1)
@@ -463,6 +502,3 @@ test_that("policy_learn with type drql handles multiple stages with varying stag
     pe2$IC
   )
 })
-
-
-

@@ -1,10 +1,10 @@
-check_q_formula <- function(formula, data){
+check_q_formula <- function(formula, data) {
   tt <- terms(formula, data = data)
-  if (length(attr(tt, "term.labels"))>0){
+  if (length(attr(tt, "term.labels")) > 0) {
     formula <- reformulate(attr(tt, "term.labels"), response = NULL)
     tt <- terms(formula, data = data)
     v <- all.vars(tt)
-    if(!all(v %in% colnames(data))){
+    if (!all(v %in% colnames(data))) {
       mes <- deparse(formula)
       mes <- paste("The Q-model formula", mes, "is invalid.")
       stop(mes)
@@ -12,17 +12,18 @@ check_q_formula <- function(formula, data){
   }
 }
 
-update_q_formula <- function(formula, data, V_res){
+update_q_formula <- function(formula, data, V_res) {
   tt <- terms(formula, data = data)
-  if (length(attr(tt, "term.labels")) == 0)
+  if (length(attr(tt, "term.labels")) == 0) {
     formula <- V_res ~ 1
-  else
+  } else {
     formula <- reformulate(attr(tt, "term.labels"), response = "V_res")
+  }
 
   return(formula)
 }
 
-new_q_model <- function(q_model){
+new_q_model <- function(q_model) {
   class(q_model) <- c("q_model", "function")
   return(q_model)
 }
@@ -241,10 +242,13 @@ predict.q_glmnet <- function(object, new_AH, ...) {
   s <- getElement(object, "s")
 
   newx <- apply_design(design, data = new_AH)
-  pred <- predict(model,
-                  newx = newx,
-                  type = "response",
-                  s = s)
+  pred <- predict(
+    model,
+    newx = newx,
+    type = "response",
+    s = s
+  )
+  pred <- as.vector(pred)
   return(pred)
 }
 
@@ -386,9 +390,11 @@ predict.q_sl <- function(object, new_AH, ...) {
   onlySL <- getElement(object, "onlySL")
   newdata <- apply_design(design = design, data = new_AH)
   newdata <- as.data.frame(newdata)
-  pred <- predict(model,
-                     newdata = newdata,
-                     onlySL = onlySL)$pred[, 1]
+  pred <- predict(
+    model,
+    newdata = newdata,
+    onlySL = onlySL
+  )$pred[, 1]
   return(pred)
 }
 
@@ -497,5 +503,24 @@ predict.q_xgboost <- function(object, new_AH, ...){
   new_data <- apply_design(design = design, data = new_AH)
 
   pred <- predict(model, newdata = new_data)
+  return(pred)
+}
+
+## used for testing:
+q_degen <- function(var) {
+  force(var)
+  q_degen <- function(AH, V_res, ...) {
+    m <- list(var = var)
+    class(m) <- "q_degen"
+    return(m)
+  }
+  q_degen <- new_q_model(q_degen)
+  return(q_degen)
+}
+
+#' @export
+predict.q_degen <- function(object, new_AH, ...) {
+  var <- getElement(object, "var")
+  pred <- unname(unlist(new_AH[, var, with = FALSE]))
   return(pred)
 }

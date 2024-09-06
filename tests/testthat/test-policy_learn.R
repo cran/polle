@@ -179,3 +179,61 @@ test_that("policy_learn checks input", {
     })
 
 })
+
+test_that("policy_learn returns an error if type != 'blip' or type != 'ptl and threshold != 0.", {
+  d <- sim_single_stage(200, seed = 1)
+  pd <- policy_data(d,
+    action = "A",
+    covariates = list("Z", "B", "L"),
+    utility = "U"
+  )
+
+  expect_no_error(
+    policy_learn(type = "ptl", control = control_ptl(), threshold = NULL)
+  )
+
+  expect_no_error(
+    policy_learn(type = "ptl", control = control_ptl(), threshold = 1)
+  )
+
+  expect_no_error(
+    policy_learn(type = "blip", control = control_blip(), threshold = 1)
+  )
+
+  expect_error(
+    policy_learn(type = "drql", control = control_drql(), threshold = 1),
+    ".only implemented for type 'blip' or 'ptl'"
+  )
+})
+
+test_that("set_threshold", {
+  expect_equal(
+    set_threshold(selection = c(1, 2, 3)),
+    c(1, 2, 3)
+  )
+
+  expect_equal(
+    set_threshold(threshold = c(1, 3), selection = c(1, 2, 3)),
+    c(1, 3)
+  )
+
+  expect_equal(
+    set_threshold(threshold = c(3, 1), selection = c(1, 2, 3)),
+    c(1, 3)
+  )
+
+  expect_equal(
+    set_threshold(threshold = c(), selection = c(1, 2, 3)),
+    c(1, 2, 3)
+  )
+
+  expect_error(
+    set_threshold(threshold = c(1.5, 3), selection = c(1, 2, 3)),
+    "Invalid threshold. Choose between 1, 2, 3."
+  )
+
+  expect_equal(
+    set_threshold(threshold = c(3, 1.5), selection = c(1, 2, 3), overwrite = TRUE),
+    c(1.5, 3)
+  )
+})

@@ -9,21 +9,42 @@
 \alias{get_policy_functions.ql}
 \title{Get Policy Functions}
 \usage{
-\method{get_policy_functions}{blip}(object, stage, include_g_values = FALSE, ...)
+\method{get_policy_functions}{blip}(
+  object,
+  stage,
+  threshold = NULL,
+  include_g_values = FALSE,
+  ...
+)
 
-\method{get_policy_functions}{drql}(object, stage, include_g_values = FALSE, ...)
+\method{get_policy_functions}{drql}(
+  object,
+  stage,
+  threshold = NULL,
+  include_g_values = FALSE,
+  ...
+)
 
-get_policy_functions(object, stage, ...)
+get_policy_functions(object, stage, threshold, ...)
 
-\method{get_policy_functions}{ptl}(object, stage, ...)
+\method{get_policy_functions}{ptl}(object, stage, threshold = NULL, ...)
 
-\method{get_policy_functions}{ql}(object, stage, include_g_values = FALSE, ...)
+\method{get_policy_functions}{ql}(
+  object,
+  stage,
+  threshold = NULL,
+  include_g_values = FALSE,
+  ...
+)
 }
 \arguments{
 \item{object}{Object of class "policy_object" or "policy_eval",
 see \link{policy_learn} and \link{policy_eval}.}
 
 \item{stage}{Integer. Stage number.}
+
+\item{threshold}{Numeric, threshold for not
+choosing the reference action at stage 1.}
 
 \item{include_g_values}{If TRUE, the g-values are included as an attribute.}
 
@@ -32,7 +53,7 @@ see \link{policy_learn} and \link{policy_eval}.}
 \value{
 Functions with arguments:
 \describe{
-\item{\code{H}}{\link{data.table} containing the variables needed to evaluate the policy (and g-function).}
+\item{\code{H}}{\link[data.table:data.table]{data.table::data.table} containing the variables needed to evaluate the policy (and g-function).}
 }
 }
 \description{

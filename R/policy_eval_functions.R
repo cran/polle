@@ -22,13 +22,13 @@ check_actions <- function(actions, policy_data){
 #' @rdname policy_eval
 #' @export
 coef.policy_eval <- function(object, ...) {
-  return(object$value_estimate)
+  return(get_element(object, "coef"))
 }
 
 #' @rdname policy_eval
 #' @export
 IC.policy_eval <- function(x, ...) {
-  res <- cbind(getElement(x, "IC"))
+  res <- cbind(get_element(x, "IC", check_name = FALSE))
   return(res)
 }
 
@@ -44,34 +44,68 @@ vcov.policy_eval <- function(object, ...) {
 
 #' @rdname policy_eval
 #' @export
-print.policy_eval <- function(x, ...) {
-  print(summary(x, ...))
+print.policy_eval <- function(x,
+                              digits = 4L,
+                              width = 35L,
+                              std.error = TRUE,
+                              level = 0.95,
+                              p.value = TRUE,
+                              ...) {
+  est <- estimate(x, level = level, ...)
+  print(
+    est,
+    digits = digits,
+    width = width,
+    std.error = std.error,
+    p.value = p.value,
+    ...
+  )
 }
 
 
 #' @rdname policy_eval
 #' @export
-summary.policy_eval <- function(object, ...){
+summary.policy_eval <- function(object, ...) {
   lava::estimate(object, ...)
 }
 
 #' @rdname policy_eval
 #' @export
-estimate.policy_eval <- function(x, ..., labels=x$name) {
+estimate.policy_eval <- function(x,
+                                 labels = get_element(x,
+                                   "name",
+                                   check_name = FALSE
+                                 ),
+                                 level = 0.95,
+                                 ...) {
   p <- length(coef(x))
   if (is.null(labels)) {
-    if (p==1) {
-      "value"
+    target <- get_element(x, "target")
+    if (p == 1) {
+      labels <- target
     } else {
-      labels <- paste0("value", seq(p))
+      labels <- paste0(target, seq(p))
     }
   }
   ic <- IC(x)
-  if (is.null(ic)){
-    est <- lava::estimate(NULL, coef=coef(x), vcov=NULL, ...) # labels=labels
+  if (is.null(ic)) {
+    est <- lava::estimate(
+      NULL,
+      coef = coef(x),
+      vcov = NULL,
+      labels = labels,
+      ...
+    )
+  } else {
+    est <- lava::estimate(
+      NULL,
+      coef = coef(x),
+      IC = ic,
+      labels = labels,
+      level = level,
+      ...
+    )
   }
-  else
-    est <- lava::estimate(NULL, coef=coef(x), IC=ic, labels=labels, ...)
   return(est)
 }
 
@@ -130,15 +164,21 @@ conditional <- function(object, policy_data, baseline)
   UseMethod("conditional")
 
 #' @export
-conditional.policy_eval <- function(object, policy_data, baseline){
+conditional.policy_eval <- function(object, policy_data, baseline) {
   policy_eval <- object
 
-  if (!inherits(policy_eval, "policy_eval"))
+  if (!inherits(policy_eval, "policy_eval")) {
     stop("policy_eval must be of inherited class 'policy_eval'.")
-  if (!inherits(policy_data, "policy_data"))
+  }
+  if (!inherits(policy_data, "policy_data")) {
     stop("policy_data must be of inherited class 'policy_data'.")
-  if (!is.character(baseline) | length(baseline)!= 1)
+  }
+  if (!is.character(baseline) || length(baseline) != 1) {
     stop("baseline must be a single character.")
+  }
+  if (get_element(policy_eval, "target") != "value") {
+    stop("only implemented for target = 'value'.")
+  }
 
   baseline_data <- policy_data[["baseline_data"]]
 
@@ -147,8 +187,9 @@ conditional.policy_eval <- function(object, policy_data, baseline){
     policy_eval[["id"]],
     baseline_data[["id"]]
   )
-  if (!check)
+  if (!check) {
     stop("ID's does not match.")
+  }
 
   # getting the doubly robust score:
   z <- IC(policy_eval) + coef(policy_eval)
@@ -157,19 +198,20 @@ conditional.policy_eval <- function(object, policy_data, baseline){
   agg <- aggregate(z, by = by, mean)
   coef <- agg[["V1"]]
 
+  n <- get_n(policy_data)
   groups <- agg[[baseline]]
   IC <- matrix(0, nrow = nrow(baseline_data), ncol = length(groups))
-  for (j in seq_along(coef)){
+  for (j in seq_along(coef)) {
     idx <- baseline_data[[baseline]] == groups[j]
-    id <- baseline_data[["id"]][idx]
-    ic <- z[idx,] - coef[j]
-    IC[idx,j] <- ic
+    ic <- z[idx, ] - coef[j]
+    IC[idx, j] <- ic / sum(idx) * n
   }
   est <- estimate(NULL,
-                  coef = coef,
-                  IC = cbind(IC),
-                  id = baseline_data[["id"]],
-                  labels = paste(baseline, groups, sep = ":"))
+    coef = coef,
+    IC = cbind(IC),
+    id = baseline_data[["id"]],
+    labels = paste(baseline, groups, sep = ":")
+  )
   return(est)
 }
 
@@ -199,7 +241,7 @@ get_policy.policy_eval <- function(object){
 #' @description \code{get_policy_actions()} extract the actions dictated by the
 #' (learned and possibly cross-fitted) policy a every stage.
 #' @param object Object of class [policy_eval].
-#' @returns [data.table] with keys \code{id} and \code{stage} and action variable
+#' @returns [data.table::data.table] with keys \code{id} and \code{stage} and action variable
 #' \code{d}.
 #' @examples
 #' ### Two stages:

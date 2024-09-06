@@ -1,68 +1,89 @@
 #' Create Policy Learner
 #'
-#' \code{policy_learn()} is used to specify a policy learning method (Q-learning,
+#' \code{policy_learn()} is used to specify a policy
+#' learning method (Q-learning,
 #' doubly robust Q-learning, policy tree
-#' learning and outcome weighted learning). Evaluating the policy learner returns a policy object.
+#' learning and outcome weighted learning).
+#' Evaluating the policy learner returns a policy object.
 #' @param type Type of policy learner method:
 #' \itemize{
 #'   \item \code{"ql"}: Quality/Q-learning.
 #'   \item \code{"drql"}: Doubly Robust Q-learning.
-#'   \item \code{"blip"}: Doubly Robust blip-learning (only for dichotomous actions).
+#'   \item \code{"blip"}:
+#' Doubly Robust blip-learning (only for dichotomous actions).
 #'   \item \code{"ptl"}: Policy Tree Learning.
 #'   \item \code{"owl"}: Outcome Weighted Learning.
-#'   \item \code{"earl"}: Efficient Augmentation and Relaxation Learning (only single stage).
+#'   \item \code{"earl"}:
+#' Efficient Augmentation and Relaxation Learning (only single stage).
 #'   \item \code{"rwl"}: Residual Weighted Learning (only single stage).
 #' }
-#' @param control List of control arguments. Values (and default values) are set using
+#' @param control List of control arguments.
+#' Values (and default values) are set using
 #' \code{control_{type}()}. Key arguments include:\cr
 #' [control_drql()]:\cr
 #' \itemize{
-#'   \item \code{qv_models}: Single element or list of V-restricted Q-models created
-#'           by [q_glm()], [q_rf()], [q_sl()] or similar functions.
+#'   \item \code{qv_models}:
+#' Single element or list of V-restricted Q-models created
+#' by [q_glm()], [q_rf()], [q_sl()] or similar functions.
 #' }
 #' [control_blip()]:\cr
 #' \itemize{
-#'   \item \code{blip_models}: Single element or list of V-restricted blip-models created
-#'           by [q_glm()], [q_rf()], [q_sl()] or similar functions.
+#'   \item \code{blip_models}:
+#' Single element or list of V-restricted blip-models created
+#' by [q_glm()], [q_rf()], [q_sl()] or similar functions.
 #' }
 #' [control_ptl()]: \cr
 #' \itemize{
 #'   \item \code{policy_vars}: Character vector/string or list of character
-#' vectors/strings. Variable names used to construct the V-restricted policy tree.
+#' vectors/strings. Variable names used to construct
+#' the V-restricted policy tree.
 #' The names must be a subset of the history names, see get_history_names().
-#'   \item \code{hybrid}: If \code{TRUE}, [policytree::hybrid_policy_tree()] is used to
+#'   \item \code{hybrid}: If \code{TRUE},
+#' [policytree::hybrid_policy_tree()] is used to
 #' fit a policy tree.
-#'   \item \code{depth}: Integer or integer vector. The depth of the fitted policy
+#'   \item \code{depth}:
+#' Integer or integer vector. The depth of the fitted policy
 #' tree for each stage.
 #' }
 #' [control_owl()]: \cr
 #' \itemize{
 #'   \item \code{policy_vars}: As in \code{control_ptl()}.
-#'   \item \code{loss}: Loss function. The options are \code{"hinge"}, \code{"ramp"},
+#'   \item \code{loss}: Loss function.
+#' The options are \code{"hinge"}, \code{"ramp"},
 #' \code{"logit"}, \code{"logit.lasso"}, \code{"l2"}, \code{"l2.lasso"}.
-#'   \item \code{kernel}: Type of kernel used by the support vector machine. The
+#'   \item \code{kernel}: Type of kernel
+#' used by the support vector machine. The
 #' options are \code{"linear"}, \code{"rbf"}.
 #'    \item \code{augment}:  If \code{TRUE} the outcomes are augmented.
 #' }
 #' [control_earl()]/[control_rwl()]: \cr
 #' \itemize{
-#'   \item \code{moPropen}: Propensity model of class "ModelObj", see [modelObj::modelObj].
+#'   \item \code{moPropen}:
+#' Propensity model of class "ModelObj", see [modelObj::modelObj].
 #'   \item \code{moMain}: Main effects outcome model of class "ModelObj".
 #'   \item \code{moCont} Contrast outcome model of class "ModelObj".
-#'   \item \code{regime}: An object of class [formula] specifying the design of the policy.
-#'   \item \code{surrogate}: The surrogate 0-1 loss function. The options are
-#' \code{"logit"}, \code{"exp"}, \code{"hinge"}, \code{"sqhinge"}, \code{"huber"}.
-#'   \item \code{kernel}: The options are \code{"linear"}, \code{"poly"}, \code{"radial"}.
+#'   \item \code{regime}:
+#' An object of class [formula] specifying the design of the policy.
+#'   \item \code{surrogate}:
+#' The surrogate 0-1 loss function. The options are
+#' \code{"logit"}, \code{"exp"},
+#' \code{"hinge"}, \code{"sqhinge"}, \code{"huber"}.
+#'   \item \code{kernel}: The options are
+#' \code{"linear"}, \code{"poly"}, \code{"radial"}.
 #' }
 #' @param alpha Probability threshold for determining realistic actions.
+#' @param threshold Numeric vector, thresholds for not
+#' choosing the reference action at stage 1.
+#' @param full_history If \code{TRUE}, the full
+#' history is used to fit each policy function (e.g. QV-model,
+#' policy tree). If FALSE, the single stage/
+#' "Markov type" history is used to fit each policy function.
 #' @param L Number of folds for cross-fitting nuisance models.
 #' @param cross_fit_g_models If \code{TRUE}, the g-models will not be
 #' cross-fitted even if L > 1.
-#' @param save_cross_fit_models If \code{TRUE}, the cross-fitted models will be saved.
+#' @param save_cross_fit_models If \code{TRUE}, the cross-fitted
+#' models will be saved.
 #' @param future_args Arguments passed to [future.apply::future_apply()].
-#' @param full_history If \code{TRUE}, the full
-#' history is used to fit each policy function (e.g. QV-model, policy tree). If FALSE, the single stage/
-#' "Markov type" history is used to fit each policy function.
 #' @param name Character string.
 #' @param x Object of class "policy_object" or "policy_learn".
 #' @param ... Additional arguments passed to print.
@@ -70,28 +91,34 @@
 #' Evaluating the function on a [policy_data] object returns an object of
 #' class [policy_object]. A policy object is a list containing all or
 #' some of the following elements:
-#' \item{\code{q_functions}}{Fitted Q-functions. Object of class "nuisance_functions".}
-#' \item{\code{g_functions}}{Fitted g-functions. Object of class "nuisance_functions".}
-#' \item{\code{action_set}}{Sorted character vector describing the action set, i.e.,
+#' \describe{
+#' \item{\code{q_functions}}{Fitted Q-functions. Object
+#'                           of class "nuisance_functions".}
+#' \item{\code{g_functions}}{Fitted g-functions. Object
+#'                           of class "nuisance_functions".}
+#' \item{\code{action_set}}{Sorted character vector describing
+#'                          the action set, i.e.,
 #'                          the possible actions at each stage.}
-#' \item{\code{alpha}}{Numeric. Probability threshold to determine realistic actions.}
+#' \item{\code{alpha}}{Numeric. Probability threshold to determine
+#'                     realistic actions.}
 #' \item{\code{K}}{Integer. Maximal number of stages.}
-#' \item{\code{qv_functions}}{(only if \code{type = "drql"}) Fitted V-restricted
-#' Q-functions. Contains a fitted model for each stage and action.}
+#' \item{\code{qv_functions}}{(only if \code{type = "drql"}) Fitted
+#' V-restricted Q-functions. Contains a fitted model for each stage and action.}
 #' \item{\code{ptl_objects}}{(only if \code{type = "ptl"}) Fitted V-restricted
-#' policy trees. Contains a [policy_tree] for each stage.}
+#' policy trees. Contains a [policytree::policy_tree] for each stage.}
 #' \item{\code{ptl_designs}}{(only if \code{type = "ptl"}) Specification of the
 #' V-restricted design matrix for each stage}
+#' }
 #' @section S3 generics:
 #' The following S3 generic functions are available for an object of
 #' class "policy_object":
 #' \describe{
-#' \item{[get_g_functions()]}{ Extract the fitted g-functions.}
-#' \item{[get_q_functions()]}{ Extract the fitted Q-functions.}
-#' \item{[get_policy()]}{ Extract the fitted policy object.}
-#' \item{[get_policy_functions()]}{ Extract the fitted policy function for
+#' \item{[get_g_functions()]}{Extract the fitted g-functions.}
+#' \item{[get_q_functions()]}{Extract the fitted Q-functions.}
+#' \item{[get_policy()]}{Extract the fitted policy object.}
+#' \item{[get_policy_functions()]}{Extract the fitted policy function for
 #'                                 a given stage.}
-#' \item{[get_policy_actions()]}{ Extract the (fitted) policy actions.}
+#' \item{[get_policy_actions()]}{Extract the (fitted) policy actions.}
 #' }
 #' @references
 #' Doubly Robust Q-learning (\code{type = "drql"}): Luedtke, Alexander R., and
@@ -144,42 +171,69 @@
 policy_learn <- function(type = "ql",
                          control = list(),
                          alpha = 0,
+                         threshold = NULL,
                          full_history = FALSE,
                          L = 1,
                          cross_fit_g_models = TRUE,
                          save_cross_fit_models = FALSE,
                          future_args = list(future.seed = TRUE),
-                         name = type
-){
+                         name = type) {
   # input checks:
-  if (length(type) != 1 | !is.character(type))
+  if (length(type) != 1 || !is.character(type)) {
     stop("type must be a character string.")
-  if (!(is.numeric(alpha) & (length(alpha) == 1)))
-    stop("alpha must be numeric and in [0, 0.5).")
-  if (!(alpha >=0 & alpha < 0.5))
-    stop("alpha must be numeric and in [0, 0.5).")
-  if (!(is.logical(full_history) & (length(full_history) == 1)))
-    stop("full_history must be TRUE or FALSE")
-  if (!(is.numeric(L) & (length(L) == 1)))
-    stop("L must be an integer greater than 0.")
-  if (!(L %% 1 == 0))
-    stop("L must be an integer greater than 0.")
-  if (L<=0)
-    stop("L must be an integer greater than 0.")
-  if (!(is.logical(cross_fit_g_models) & (length(cross_fit_g_models) == 1)))
-    stop("cross_fit_g_models must be TRUE or FALSE")
-  if (!(is.logical(save_cross_fit_models) & (length(save_cross_fit_models) == 1)))
-    stop("save_cross_fit_models must be TRUE or FALSE")
-  if (!is.null(name)){
-    name <- as.character(name)
-    if (length(name) != 1)
-      stop("name must be a character string.")
   }
-  if (!is.list(future_args))
+  if (!(is.numeric(alpha) && (length(alpha) == 1))) {
+    stop("alpha must be numeric and in [0, 0.5).")
+  }
+  if (!(alpha >= 0 && alpha < 0.5)) {
+    stop("alpha must be numeric and in [0, 0.5).")
+  }
+  threshold_indicator <- !is.null(threshold)
+  if (threshold_indicator == TRUE) {
+    if (!(is.numeric(threshold) && (length(threshold) >= 1))) {
+      stop("threshold must be numeric (vector).")
+    }
+    threshold <- unique(sort(threshold))
+  }
+  if (threshold_indicator == FALSE) {
+    threshold <- 0
+  }
+  if (!(is.logical(full_history) && (length(full_history) == 1))) {
+    stop("full_history must be TRUE or FALSE")
+  }
+  if (!(is.numeric(L) && (length(L) == 1))) {
+    stop("L must be an integer greater than 0.")
+  }
+  if (!(L %% 1 == 0)) {
+    stop("L must be an integer greater than 0.")
+  }
+  if (L <= 0) {
+    stop("L must be an integer greater than 0.")
+  }
+  if (!(is.logical(cross_fit_g_models) && (length(cross_fit_g_models) == 1))) {
+    stop("cross_fit_g_models must be TRUE or FALSE")
+  }
+  if (!(is.logical(save_cross_fit_models) &&
+    (length(save_cross_fit_models) == 1))) {
+    stop("save_cross_fit_models must be TRUE or FALSE")
+  }
+  if (!is.null(name)) {
+    name <- as.character(name)
+    if (length(name) != 1) {
+      stop("name must be a character string.")
+    }
+    if (length(threshold) > 1 || any(threshold != 0)) {
+      name <- paste(name, "(eta=", threshold, ")", sep = "")
+    }
+  }
+
+  if (!is.list(future_args)) {
     stop("future_args must be a list.")
+  }
 
   pl_args <- list(
     alpha = alpha,
+    threshold = threshold,
     L = L,
     cross_fit_g_models = cross_fit_g_models,
     save_cross_fit_models = save_cross_fit_models,
@@ -187,31 +241,51 @@ policy_learn <- function(type = "ql",
     full_history = full_history
   )
 
-
   type <- tolower(type)
   if (type %in% c("ql", "rql", "q_learning", "q-learning")) {
     call <- "rql"
   } else if (type %in% c("drql", "rqvl", "qvl", "qv_learning", "qv-learning")) {
     call <- "drql"
-  } else if (type %in% c("ptl", "policytree", "policy_tree")){
+  } else if (type %in% c("ptl", "policytree", "policy_tree")) {
     if (!requireNamespace("policytree")) {
-      stop("The policytree package is required to perform value searching using trees.")
+      mes <- paste0(
+        "The policytree package is required ",
+        "to perform value searching using trees."
+      )
+      stop(mes)
     }
     call <- "ptl"
-  } else if (type %in% c("owl", "bowl")){
+  } else if (type %in% c("owl", "bowl")) {
     if (!requireNamespace("DTRlearn2")) {
-      stop("The DTRlearn2 package is required to perform value searching using outcome-weighted learning.")
+      mes <- paste0(
+        "The DTRlearn2 package is required to perform value ",
+        "searching using outcome-weighted learning."
+      )
+      stop(mes)
     }
     call <- "dtrlearn2_owl"
-  } else if (type %in% c("earl")){
+  } else if (type %in% c("earl")) {
     call <- "dyntxregime_earl"
-  } else if (type %in% c("rwl")){
+  } else if (type %in% c("rwl")) {
     call <- "dyntxregime_rwl"
-  } else if (type %in% c("drb", "blip")){
+  } else if (type %in% c("drb", "blip")) {
     call <- "blip"
-  } else{
-    stop("Unknown type of policy learner. Use 'ql', 'drql', 'ptl', 'owl', 'earl' or 'rwl'.")
+  } else {
+    mes <- paste0(
+      "Unknown type of policy learner. Use 'ql', 'drql', ",
+      "'ptl', 'owl', 'earl' or 'rwl'."
+    )
+    stop(mes)
   }
+
+  if ((threshold_indicator == TRUE) && (!(call %in% c("blip", "ptl")))) {
+    mes <- paste0(
+      "The threshold argument is only implemented for type 'blip' or 'ptl'. ",
+      "Please set threshold = NULL."
+    )
+    stop(mes)
+  }
+
   args <- append(pl_args, control)
   pl <- pl(call = call, args = args)
   class(pl) <- c("policy_learn", "function")
@@ -222,10 +296,10 @@ policy_learn <- function(type = "ql",
   return(pl)
 }
 
-pl <- function(call, args){
+pl <- function(call, args) {
   function(policy_data,
            g_models = NULL, g_functions = NULL, g_full_history = FALSE,
-           q_models, q_full_history = FALSE){
+           q_models, q_full_history = FALSE) {
     eval_args <- as.list(environment())
     args <- append(args, eval_args)
     do.call(what = call, args)
@@ -239,7 +313,6 @@ NULL
 #' @rdname policy_learn
 #' @export
 print.policy_learn <- function(x, ...) {
-
   cat("Policy learner with arguments:")
 
   cp <- args(x)
@@ -250,13 +323,9 @@ print.policy_learn <- function(x, ...) {
   cp <- gsub(",", ", ", cp, fixed = TRUE)
   n_start <- 10
   n_end <- gregexpr(")", cp)[[1]][1]
-  cp <- substr(cp,n_start, n_end-1)
+  cp <- substr(cp, n_start, n_end - 1)
 
   cat("\n")
-  cat(paste(strwrap(cp, 60), collapse="\n"))
+  cat(paste(strwrap(cp, 60), collapse = "\n"))
   cat("\n")
-
 }
-
-
-

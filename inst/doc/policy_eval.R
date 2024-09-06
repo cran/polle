@@ -12,7 +12,7 @@ pd <- policy_data(d,
 pd
 
 ## ----poldef-------------------------------------------------------------------
-p1 <- policy_def(policy_functions = '1', reuse = TRUE, name = "A=1")
+p1 <- policy_def(policy_functions = '1', reuse = TRUE, name = "(A=1)")
 
 ## ----polevalp1----------------------------------------------------------------
 (pe1 <- policy_eval(policy_data = pd,
@@ -27,7 +27,7 @@ vcov(pe1)
 IC(pe1) |> head()
 
 ## ----estimate_merge-----------------------------------------------------------
-p0 <- policy_def(policy_functions = 0, reuse = TRUE, name = "A=0")
+p0 <- policy_def(policy_functions = 0, reuse = TRUE, name = "(A=0)")
 pe0 <- policy_eval(policy_data = pd,
                    policy = p0,
                    type = "dr")
