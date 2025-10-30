@@ -30,6 +30,15 @@
 #' If a single model is provided, the model is reused at every stage.
 #' @param q_full_history Similar to g_full_history.
 #' @param save_q_functions Similar to save_g_functions.
+#' @param c_functions Fitted c-model/censoring probability model objects. Preferably, use \code{c_models}.
+#' @param c_models List of right-censoring probability models, see [c_model].
+#' @param c_full_history Similar to g_full_history.
+#' @param save_c_functions Similar to save_g_functions.
+#' @param m_function Fitted outcome model object for stage K+1. Preferably, use \code{m_model}.
+#' @param m_model Outcome model for the utility at stage K+1. Only used if the final utility
+#' contribution is missing/has been right-censored
+#' @param m_full_history Similar to g_full_history.
+#' @param save_m_function Similar to save_g_functions.
 #' @param target Character string. Either "value" or "subgroup". If "value",
 #' the target parameter is the policy value.
 #' If "subgroup", the target parameter
@@ -47,6 +56,8 @@
 #' @param variance_type Character string. Either "pooled" (default),
 #' "stacked" or "complete", see details. (Only used if \code{M > 1})
 #' @param M Number of folds for cross-fitting.
+#' @param nrep Number of repetitions of cross-fitting (estimates averaged over repeated cross-fittings)
+#' @param min_subgroup_size Minimum number of observations in the evaluated subgroup (Only used if target = "subgroup").
 #' @param future_args Arguments passed to [future.apply::future_apply()].
 #' @param name Character string.
 #' @param object,x,y Objects of class "policy_eval".
@@ -293,14 +304,145 @@ policy_eval <- function(policy_data,
                         g_full_history = FALSE, save_g_functions = TRUE,
                         q_functions = NULL, q_models = q_glm(),
                         q_full_history = FALSE, save_q_functions = TRUE,
+                        c_functions = NULL, c_models = NULL,
+                        c_full_history = FALSE, save_c_functions = TRUE,
+                        m_function = NULL, m_model = NULL,
+                        m_full_history = FALSE, save_m_function = TRUE,
                         target = "value",
                         type = "dr",
                         cross_fit_type = "pooled",
                         variance_type = "pooled",
-                        M = 1, future_args = list(future.seed=TRUE),
+                        M = 1,
+                        nrep = 1,
+                        min_subgroup_size = 1,
+                        future_args = list(future.seed=TRUE),
                         name = NULL
                         ) {
-  # input checks:
+  ## argument input checks:
+  args <- as.list(environment())
+  args <- do.call(what = "policy_eval_input_checks", args)
+
+  ## collecting the arguments to be passed on:
+  args[["policy_data"]] <- NULL
+  args[["M"]] <- NULL
+  args[["train_block_size"]] <- NULL
+  args[["future_args"]] <- NULL
+  args[["variance_type"]] <- NULL
+  args[["cross_fit_type"]] <- NULL
+  args[["nrep"]] <- NULL
+
+  if (M > 1) {
+    if (nrep == 1){
+      eval <- policy_eval_cross(
+        args = args,
+        policy_data = policy_data,
+        M = M,
+        cross_fit_type = cross_fit_type,
+        variance_type = variance_type,
+        future_args = future_args
+      )
+    } else {
+      ## repeated cross-fitting
+      eval <- policy_eval_rep(
+        nrep = nrep,
+        args = args,
+        policy_data = policy_data,
+        M = M,
+        cross_fit_type = cross_fit_type,
+        variance_type = variance_type,
+        future_args = future_args
+      )
+    }
+
+  } else {
+    args[["train_policy_data"]] <- policy_data
+    args[["valid_policy_data"]] <- policy_data
+    eval <- do.call(what = policy_eval_type, args = args)
+  }
+
+  return(eval)
+}
+
+model_input_checks <- function(policy_data,
+                               g_functions, g_models,
+                               g_full_history, save_g_functions,
+                               q_functions, q_models,
+                               q_full_history, save_q_functions,
+                               c_functions, c_models,
+                               c_full_history, save_c_functions,
+                               m_function, m_model,
+                               m_full_history, save_m_function) {
+  check_function <- function(func, class_name){
+    if (!is.null(func) && !inherits(func, class_name)) {
+      stop(paste(class_name, " must be of class '", class_name, "'.", sep=""))
+    }
+  }
+
+  # check function classes:
+  check_function(g_functions, "g_functions")
+  check_function(q_functions, "q_functions")
+  check_function(c_functions, "c_functions")
+  check_function(m_function, "m_function")
+
+  # check logical flags:
+  logical_checks <- function(flag, name) {
+    if (!(is.logical(flag) && length(flag) == 1)) {
+      stop(paste(name, "must be TRUE or FALSE.", sep = " "))
+    }
+  }
+
+  logical_checks(g_full_history, "g_full_history")
+  logical_checks(q_full_history, "q_full_history")
+  logical_checks(c_full_history, "c_full_history")
+  logical_checks(m_full_history, "m_full_history")
+
+  if ((is.null(g_functions) && is.null(g_models))) {
+    stop("Provide either g_functions or g_models.")
+  }
+  if ((is.null(q_functions) && is.null(q_models))) {
+    stop("Provide either q_functions or q_models.")
+  }
+
+  cens_indicator <- get_element(policy_data, "cens_indicator")
+  terminal_indicator <- get_element(policy_data, "terminal_indicator")
+  if (any(cens_indicator[["indicator"]]) &&
+      any(terminal_indicator[get("stage") <= get_K(policy_data),][["indicator"]])) {
+    stop("policy_eval is not implemented for both right-censoring and a stochastic number of action stages.")
+  }
+  if (any(cens_indicator[["indicator"]])){
+    if ((is.null(c_models) && is.null(c_functions))) {
+      stop("Right-censoring events (event = 2) occur in the policy data. Please provide either c_functions or c_models.")
+    }
+  }
+  missing <- cens_indicator[get("stage") == (get_K(policy_data)+1),][["indicator"]]
+  if (missing == TRUE) {
+    if ((is.null(m_model) && is.null(m_function))) {
+      stop("Right-censoring events (event = 2) occur at stage K+1 in the policy data. Please provide either m_function or m_model.")
+    }
+  }
+}
+
+policy_eval_input_checks <- function(policy_data,
+                                     policy, policy_learn,
+                                     g_functions, g_models,
+                                     g_full_history, save_g_functions,
+                                     q_functions, q_models,
+                                     q_full_history, save_q_functions,
+                                     c_functions, c_models,
+                                     c_full_history, save_c_functions,
+                                     m_function, m_model,
+                                     m_full_history, save_m_function,
+                                     target,
+                                     type,
+                                     cross_fit_type,
+                                     variance_type,
+                                     M,
+                                     nrep,
+                                     min_subgroup_size,
+                                     future_args = list(),
+                                     name,
+                                     train_block_size = 1){
+  args <- as.list(environment())
   if (!inherits(policy_data, what = "policy_data"))
     stop("policy_data must be of inherited class 'policy_data'.")
   if (!is.null(policy)) {
@@ -308,8 +450,19 @@ policy_eval <- function(policy_data,
       stop("policy must be of inherited class 'policy'.")
     }
   }
+
+  model_input_checks(policy_data = policy_data,
+                     g_functions = g_functions, g_models = g_models,
+                     g_full_history = g_full_history, save_g_functions = save_g_functions,
+                     q_functions = q_functions, q_models = q_models,
+                     q_full_history = q_full_history, save_q_functions = save_q_functions,
+                     c_functions = c_functions, c_models = c_models,
+                     c_full_history = c_full_history, save_c_functions = save_c_functions,
+                     m_function = m_function, m_model = m_model,
+                     m_full_history = m_full_history, save_m_function = save_m_function)
+
   if ((is.null(policy) && is.null(policy_learn)) ||
-    (!is.null(policy_learn) && !is.null(policy))) {
+      (!is.null(policy_learn) && !is.null(policy))) {
     stop("Provide either policy or policy_learn.")
   }
   if (is.null(policy) && !is.null(policy_learn)) {
@@ -317,22 +470,7 @@ policy_eval <- function(policy_data,
       stop("policy_learn must be of inherited class 'policy_learn'.")
     }
   }
-  if (!is.null(g_functions)) {
-    if (!(inherits(g_functions, "g_functions"))) {
-      stop("g_functions must be of class 'g_functions'.")
-    }
-  }
-  if (!(is.logical(g_full_history) && (length(g_full_history) == 1))) {
-    stop("g_full_history must be TRUE or FALSE")
-  }
-  if (!is.null(q_functions)) {
-    if (!(inherits(q_functions, "q_functions"))) {
-      stop("q-functions must be of class 'q_functions'.")
-    }
-  }
-  if (!(is.logical(q_full_history) && (length(q_full_history) == 1))) {
-    stop("q_full_history must be TRUE or FALSE")
-  }
+
   if (!(is.numeric(M) && (length(M) == 1))) {
     stop("M must be an integer greater than 0.")
   }
@@ -342,34 +480,47 @@ policy_eval <- function(policy_data,
   if (M <= 0) {
     stop("M must be an integer greater than 0.")
   }
+  if (!(min_subgroup_size %% 1 == 0)) {
+    stop("min_subgroup_size must be an integer greater than 0.")
+  }
+  if (min_subgroup_size <= 0) {
+    stop("min_subgroup_size must be an integer greater than 0.")
+  }
   if (!is.list(future_args)) {
     stop("future_args must be a list.")
-  }
-  if (!is.null(name)) {
-    name <- as.character(name)
-    if (length(name) != 1) {
-      stop("name must be a character string.")
-    }
   }
   target <- tolower(target)
   if (length(target) != 1) {
     stop("target must be a character string.")
   }
   if (target %in% c(
-    "value",
-    "policy_value"
-  )) {
+                    "value",
+                    "policy_value"
+                  )) {
     target <- "value"
   } else if (target %in% c(
-    "subgroup",
-    "sub_effect",
-    "subeffect",
-    "subvalue",
-    "sub_value"
-  )) {
+                           "subgroup",
+                           "sub_effect",
+                           "subeffect",
+                           "subvalue",
+                           "sub_value"
+                         )) {
     target <- "subgroup"
   } else {
     stop("target must be either 'value' or 'subgroup'.")
+  }
+  if (!is.null(name)) {
+    name <- as.character(name)
+    if (target == "value") {
+      if (length(name) != 1) {
+        stop("name must be a character string.")
+      }
+    }
+    if (target == "subgroup") {
+      if (length(name) != 2) {
+        stop("name must be a character vector of length 2 when target = 'subgroup'.")
+      }
+    }
   }
   type <- tolower(type)
   if (length(type) != 1) {
@@ -388,58 +539,35 @@ policy_eval <- function(policy_data,
   ## editing name:
   if (is.null(name)) {
     if (target == "value") {
-      if (!is.null(policy)) {
-        pol_name <- attr(policy, "name")
-      } else {
-        pol_name <- attr(policy_learn, "name")
-      }
-      name <- "E[Z(d)]"
-      if (!is.null(pol_name)) {
-        name <- paste0(name, ": d=", pol_name)
-      }
-      rm(pol_name)
+      name <- "E[U(d)]"
     }
+
     if (target == "subgroup") {
-      if (!is.null(policy)) {
-        pol_name <- attr(policy, "name")
-      } else {
-        pol_name <- attr(policy_learn, "name")
-      }
       as <- get_action_set(policy_data)
-      name <- paste0("E[Z(", as[2], ")-Z(", as[1], ")|d=", as[2], "]")
-      if (!is.null(pol_name)) {
-        name <- paste0(name, ": d=", pol_name)
-      }
-      rm(as, pol_name)
+      name1 <- paste0("E[U(", as[2], ")-U(", as[1], ")|d=", as[2], "]")
+      name2 <- paste0("E[U(", as[2], ")-U(", as[1], ")|d=", as[1], "]")
+      name <- c(name1, name2)
+      rm(as, name1, name2)
     }
   }
 
-  ## collecting the arguments to be passed on:
-  args <- as.list(environment())
-  args[["policy_data"]] <- NULL
-  args[["M"]] <- NULL
-  args[["future_args"]] <- NULL
-  args[["variance_type"]] <- NULL
-  args[["cross_fit_type"]] <- NULL
-
-  if (M > 1) {
-    eval <- policy_eval_cross(
-      args = args,
-      policy_data = policy_data,
-      M = M,
-      cross_fit_type = cross_fit_type,
-      variance_type = variance_type,
-      future_args = future_args
-    )
-  } else {
-    args[["train_policy_data"]] <- policy_data
-    args[["valid_policy_data"]] <- policy_data
-    eval <- do.call(what = policy_eval_type, args = args)
+  ## train_block_size used for online/sequential validation:
+  if (!(is.numeric(train_block_size) && (length(train_block_size) == 1))) {
+    stop("train_block_size must be an integer greater than 0.")
+  }
+  if (!(train_block_size %% 1 == 0)) {
+    stop("train_block_size must be an integer greater than 0.")
+  }
+  if (train_block_size <= 0) {
+    stop("train_block_size must be an integer greater than 0.")
   }
 
+  ## editing args
+  args[["target"]] <- target
+  args[["type"]] <- type
+  args[["name"]] <- name
 
-
-  return(eval)
+  return(args)
 }
 
 policy_eval_object <- function(
@@ -457,12 +585,18 @@ policy_eval_object <- function(
     g_values = NULL,
     q_functions = NULL,
     q_values = NULL,
+    c_functions = NULL,
+    c_values = NULL,
+    m_function = NULL,
+    m_values = NULL,
     Z = NULL,
     subgroup_indicator = NULL,
+    min_subgroup_size = NULL,
     cross_fits = NULL,
     folds = NULL,
     cross_fit_type = NULL,
     variance_type = NULL) {
+  names(coef) <- name
   out <- as.list(environment())
   out <- remove_null_elements(out)
   class(out) <- c("policy_eval")
@@ -479,12 +613,17 @@ policy_eval_type <- function(target,
                              g_full_history, save_g_functions,
                              q_models, q_functions,
                              q_full_history, save_q_functions,
+                             c_models, c_functions,
+                             c_full_history, save_c_functions,
+                             m_model, m_function,
+                             m_full_history, save_m_function,
+                             min_subgroup_size,
                              name) {
   ##
   ## training
   ##
 
-  ## fitting the g-functions, the q-functions and the policy/policies:
+  ## fitting the g-functions, the q-functions, c-functions, and the policy/policies:
   fits <- fit_functions(
     policy_data = train_policy_data,
     type = type,
@@ -492,13 +631,19 @@ policy_eval_type <- function(target,
     g_models = g_models, g_functions = g_functions,
     g_full_history = g_full_history,
     q_models = q_models, q_functions = q_functions,
-    q_full_history = q_full_history
+    q_full_history = q_full_history,
+    c_models = c_models, c_functions = c_functions,
+    c_full_history = c_full_history,
+    m_model = m_model, m_function = m_function,
+    m_full_history = m_full_history
   )
   rm(train_policy_data)
 
-  ## getting the fitted g-functions and Q-functions:
+  ## getting the fitted g-functions, Q-functions, and c-functions:
   g_functions <- get_element(fits, "g_functions")
   q_functions <- get_element(fits, "q_functions")
+  c_functions <- get_element(fits, "c_functions")
+  m_function <- get_element(fits, "m_function")
 
   ## getting the fitted policy/policies as a list:
   if (is.null(policy)) {
@@ -507,50 +652,89 @@ policy_eval_type <- function(target,
   if (inherits(policy, what = "policy")) {
     policy <- list(policy)
   }
+  ## appending policy names:
+  pol_names <- lapply(policy, function(x) attr(x, which = "name", exact = TRUE))
+  pol_names <- unlist(pol_names)
+  if (!is.null(pol_names)){
+    name <- lapply(pol_names,
+                   function(pn){
+                     paste0(name, ": d=", pn)
+                   })
+    name <- unlist(name)
+  }
 
   ##
   ## validating
   ##
 
-  # getting the g-function values:
+  ## getting the id as a data.table:
+  id <- data.table(id = get_id(valid_policy_data))
+  setkeyv(id, "id")
+
+  ## getting the g-function values (for events 0):
   g_values <- NULL
   if (!is.null(g_functions)) {
-    g_values <- predict(g_functions, valid_policy_data)
+    g_values <- predict(g_functions, valid_policy_data, event_set = c(0))
   }
 
-  # getting the Q-function values:
+  ## getting the Q-function values (for events 0,2):
   q_values <- NULL
   if (!is.null(q_functions)) {
-    q_values <- predict(q_functions, valid_policy_data)
+    q_values <- predict(q_functions, valid_policy_data, event_set = c(0,2))
   }
 
-  # setting g-functions output:
+  ## getting the c-function values (for events 0,2):
+  c_values <- NULL
+  if (!is.null(c_functions)) {
+    c_values <- predict(c_functions, valid_policy_data)
+  }
+
+  ## getting the m-function values:
+  m_values <- NULL
+  if (!is.null(m_function)) {
+    m_values <- predict(m_function, valid_policy_data)
+  }
+
+  ## setting g-functions output:
   if (save_g_functions != TRUE) {
     g_functions <- NULL
   }
-  # setting Q-functions output:
+  ## setting Q-functions output:
   if (save_q_functions != TRUE) {
     q_functions <- NULL
   }
 
-  # getting the number of stages:
+  ## setting the c-functions output:
+  if (save_c_functions != TRUE) {
+    c_functions <- NULL
+  }
+
+   ## setting the M-functions output:
+  if (save_m_function != TRUE) {
+    m_function <- NULL
+  }
+
+  ## getting the number of stages:
   K <- get_K(valid_policy_data)
 
-  # getting the action set and stage action set:
+  ## getting the action set and stage action set:
   action_set <- get_action_set(valid_policy_data)
 
-  # getting the observed actions:
+  ## getting the observed actions:
   actions <- get_actions(valid_policy_data)
 
-  # getting the utility:
+  ## getting the events:
+  events <- get_event(valid_policy_data)
+
+  ## getting the utility:
   utility <- get_utility(valid_policy_data)
 
   ## calculating the target estimate for each policy:
   if (length(policy) == 1) {
-    # getting the policy actions:
+    ## getting the policy actions for both right-censoring and action events:
     policy_actions <- policy[[1]](valid_policy_data)
 
-    # checking that the policy actions comply with the stage action sets:
+    ## checking that the policy actions comply with the stage action sets:
     check_actions(
       actions = policy_actions,
       policy_data = valid_policy_data
@@ -559,13 +743,18 @@ policy_eval_type <- function(target,
     estimate_objects <- estimate_target(
       target = target,
       type = type,
-      K,
-      action_set,
-      actions,
-      policy_actions,
-      g_values,
-      q_values,
-      utility
+      K = K,
+      id = id,
+      action_set = action_set,
+      actions = actions,
+      policy_actions = policy_actions,
+      events = events,
+      g_values = g_values,
+      q_values = q_values,
+      c_values = c_values,
+      m_values = m_values,
+      utility = utility,
+      min_subgroup_size = min_subgroup_size
     )
     estimate_objects <- list(estimate_objects)
   } else {
@@ -574,10 +763,10 @@ policy_eval_type <- function(target,
     estimate_objects <- lapply(
       policy,
       function(p) {
-        # getting the policy actions:
+        ## getting the policy actions:## getting the policy actions for both right-censoring and action events:
         policy_actions <- p(valid_policy_data)
 
-        # checking that the policy actions comply with the stage action sets:
+        ## checking that the policy actions comply with the stage action sets:
         check_actions(
           actions = policy_actions,
           policy_data = valid_policy_data
@@ -586,13 +775,18 @@ policy_eval_type <- function(target,
         out <- estimate_target(
           target = target,
           type = type,
-          K,
-          action_set,
-          actions,
-          policy_actions,
-          g_values,
-          q_values,
-          utility
+          K = K,
+          id = id,
+          action_set = action_set,
+          actions = actions,
+          policy_actions = policy_actions,
+          events = events,
+          g_values = g_values,
+          q_values = q_values,
+          c_values = c_values,
+          m_values = m_values,
+          utility = utility,
+          min_subgroup_size = min_subgroup_size
         )
         return(out)
       }
@@ -602,7 +796,7 @@ policy_eval_type <- function(target,
   subgroup_indicator <- NULL
   Z <- NULL
   if (target == "subgroup") {
-     ## getting the doubly robust score for each treatment:
+    ## getting the doubly robust score for each treatment:
     Z <- get_element(estimate_objects[[1]], "Z")
     ## getting the subgroup indicator (if available):
     subgroup_indicator <- lapply(
@@ -627,6 +821,14 @@ policy_eval_type <- function(target,
   IC <- lapply(estimate_objects, function(eb) get_element(eb, "IC"))
   IC <- do.call(what = "cbind", IC)
 
+  ## if (target == "subgroup" & length(coef) > 1) {
+  ##   ## Reorder coefficients so all thresholds for d=1 are presented first
+  ##   ## followied by d=0
+  ##   idx <- seq_len(length(coef) / 2) * 2 - 1
+  ##   coef <- coef[c(idx, idx + 1)]
+  ##   IC <- IC[, c(idx, idx + 1)]
+  ## }
+
   out <- policy_eval_object(
     coef = coef,
     IC = IC,
@@ -641,8 +843,13 @@ policy_eval_type <- function(target,
     g_values = g_values,
     q_functions = q_functions,
     q_values = q_values,
+    c_functions = c_functions,
+    c_values = c_values,
+    m_function = m_function,
+    m_values = m_values,
     Z = Z,
     subgroup_indicator = subgroup_indicator,
+    min_subgroup_size = min_subgroup_size,
     name = name
   )
 
@@ -654,7 +861,8 @@ policy_eval_cross <- function(args,
                               M,
                               cross_fit_type,
                               variance_type,
-                              future_args) {
+                              future_args
+                              ) {
 
   ## check cross_fit_type input:
   cross_fit_type <- tolower(cross_fit_type)
@@ -676,15 +884,15 @@ policy_eval_cross <- function(args,
 
   type <- get_element(args, "type")
   target <- get_element(args, "target")
-  name <- get_element(args, "name")
+  min_subgroup_size <- get_element(args, "min_subgroup_size")
   n <- get_n(policy_data)
   id <- get_id(policy_data)
-  policy_learn <- get_element(args, "policy_learn")
-  if (!is.null(policy_learn)) {
-    n_coef <- length(get_element(attr(policy_learn, "pl_args"), "threshold"))
-  } else {
-    n_coef <- 1
-  }
+  ## policy_learn <- get_element(args, "policy_learn")
+  ## if (!is.null(policy_learn)) {
+  ##   n_thres <- length(get_element(attr(policy_learn, "pl_args"), "threshold"))
+  ## } else {
+  ##   n_thres <- 1
+  ## }
 
   ## setting up the folds:
   folds <- split(sample(1:n, n), rep(1:M, length.out = n))
@@ -703,8 +911,13 @@ policy_eval_cross <- function(args,
     ),
     future_args
   )
+
   cross_fits <- do.call(what = future.apply::future_lapply, cross_args)
 
+
+  ## collecting the paramenter name(s):
+  name <- get_element(cross_fits[[1]], "name")
+  
   ## collecting the ids from each fold (unsorted):
   id <- unlist(lapply(
     cross_fits,
@@ -718,14 +931,16 @@ policy_eval_cross <- function(args,
   ))
 
   ## collecting the cross-fitted policy actions (sorted):
-  policy_actions <- NULL
-  if (n_coef == 1) {
-    policy_actions <- lapply(
-      cross_fits, function(x) get_element(x, "policy_actions")
-    )
-    policy_actions <- rbindlist(policy_actions)
+  policy_actions <- lapply(
+    cross_fits, function(x) get_element(x, "policy_actions", check_name = FALSE)
+  )
+  policy_actions <- rbindlist(policy_actions)
+  if (nrow(policy_actions)>0) {
     setkey(policy_actions, "id", "stage")
+  } else {
+    policy_actions <- NULL
   }
+
 
   ## collecting the subgroup indicator (sorted):
   subgroup_indicator <- NULL
@@ -735,6 +950,10 @@ policy_eval_cross <- function(args,
     )
     subgroup_indicator <- do.call(what = "rbind", subgroup_indicator)
     subgroup_indicator <- subgroup_indicator[order(id), , drop = FALSE]
+    ## subgroup_indicator <- cbind(subgroup_indicator, !subgroup_indicator)
+    subgroup_size <- apply(subgroup_indicator,
+                             MARGIN = 2,
+                             sum)
   }
 
   ##
@@ -795,11 +1014,16 @@ policy_eval_cross <- function(args,
     if (cross_fit_type == "pooled") {
       ## calculating the subgroup average treatment effect estimate:
       coef <- apply(subgroup_indicator,
-        MARGIN = 2,
-        function(x) mean((Z[, 2] - Z[, 1])[x])
-      )
+                    MARGIN = 2,
+                    function(x) mean((Z[, 2] - Z[, 1])[x])
+                    )
+      coef[!(subgroup_size >= min_subgroup_size)] <- as.numeric(NA)
+
     }
+    n_coef <- length(coef)
   }
+  ## resetting the parameter name:
+  names(coef) <- name
 
   ##
   ## calculating the influence curve for the cross-fitted estimator (sorted):
@@ -837,26 +1061,26 @@ policy_eval_cross <- function(args,
     }
     if (variance_type == "pooled") {
       tmp <- apply(subgroup_indicator,
-        MARGIN = 2,
-        function(x) mean((Z[, 2] - Z[, 1])[x])
-        )
+                   MARGIN = 2,
+                   function(x) mean((Z[, 2] - Z[, 1])[x])
+                   )
       IC <- matrix(nrow = n, ncol = n_coef)
       for (j in 1:n_coef) {
         ic <- 1 / mean(subgroup_indicator[, j]) *
           subgroup_indicator[, j] * ((Z[, 2] - Z[, 1]) - tmp[j])
         IC[, j] <- ic
       }
+      IC[ ,!(subgroup_size >= min_subgroup_size)] <- NA
       rm(ic, tmp)
     }
     if (variance_type == "complete") {
       args[["train_policy_data"]] <- policy_data
       args[["valid_policy_data"]] <- policy_data
       pe <- do.call(what = policy_eval_type, args = args)
-      IC <- as.vector(IC(pe))
+      IC <- IC(pe)
       rm(pe)
     }
   }
-
 
   ## calculating the cross-fitted ipw value estimate
   ## (only if target = "value" and type = "dr"):
@@ -916,6 +1140,29 @@ policy_eval_cross <- function(args,
   } else {
     q_values <- NULL
   }
+  ## collecting the cross-fitted c- and m-values (sorted):
+  c_values <- lapply(
+    cross_fits,
+    function(x) get_element(x, "c_values", check_name = FALSE)
+  )
+  null_c_values <- unlist(lapply(c_values, is.null))
+  if (!all(null_c_values)) {
+    c_values <- data.table::rbindlist(c_values)
+    setkey(c_values, "id", "stage")
+  } else {
+    c_values <- NULL
+  }
+  m_values <- lapply(
+    cross_fits,
+    function(x) get_element(x, "m_values", check_name = FALSE)
+  )
+  null_m_values <- unlist(lapply(m_values, is.null))
+  if (!all(null_m_values)) {
+    m_values <- data.table::rbindlist(m_values)
+    setkey(m_values, "id", "stage")
+  } else {
+    m_values <- NULL
+  }
 
   ## sorting id:
   id <- id[order(id)]
@@ -931,11 +1178,14 @@ policy_eval_cross <- function(args,
     policy_actions = policy_actions,
     g_values = g_values,
     q_values = q_values,
+    c_values = c_values,
+    m_values = m_values,
     cross_fits = cross_fits,
     folds = folds,
     name = name,
     variance_type = variance_type,
-    cross_fit_type = cross_fit_type
+    cross_fit_type = cross_fit_type,
+    subgroup_indicator = subgroup_indicator
   )
 
   return(out)
@@ -951,27 +1201,84 @@ policy_eval_fold <- function(fold,
   train_id <- id[-fold]
   validation_id <- id[fold]
 
-  # training data:
+  ## training data:
   train_policy_data <- subset_id(policy_data, train_id)
   if (get_K(train_policy_data) != K) {
     stop("The number of stages varies accross the training folds.")
   }
 
-  # validation data:
+  ## validation data:
   valid_policy_data <- subset_id(policy_data, validation_id)
   if (get_K(valid_policy_data) != K) {
     stop("The number of stages varies accross the validation folds.")
   }
 
-  eval_args <- append(args, list(
-    valid_policy_data = valid_policy_data,
-    train_policy_data = train_policy_data
-  ))
+  eval_args <- append(args,
+                      list(valid_policy_data = valid_policy_data,
+                           train_policy_data = train_policy_data))
 
   out <- do.call(what = "policy_eval_type", args = eval_args)
 
-  # progress:
+  ## progress:
   prog()
 
   return(out)
+}
+
+policy_eval_rep <- function(nrep,
+                            args,
+                            policy_data,
+                            M,
+                            cross_fit_type,
+                            variance_type,
+                            future_args){
+  onerun <- function(...){
+    pe <- policy_eval_cross(
+      args = args,
+      policy_data = policy_data,
+      M = M,
+      cross_fit_type = cross_fit_type,
+      variance_type = variance_type,
+      future_args = future_args
+    )
+    name <- get_element(pe, "name")
+    out <- list(coef=coef(pe), IC=IC(pe), name = name)
+    return(out)
+  }
+
+  ## repeated cross-fitting of the policy evaluation:
+  prog <- progressor(steps = nrep)
+  rep_args <- append(
+    list(
+      X = 1:nrep,
+      FUN = onerun,
+      prog = prog
+    ),
+    future_args
+  )
+  rep_fits <- do.call(what = future.apply::future_lapply, rep_args)
+
+  name <- get_element(rep_fits[[1]], "name")
+
+  coef <- lapply(rep_fits, function(x) get_element(x, "coef"))
+  coef <- do.call(what = "rbind", coef)
+  coef <- apply(coef, MARGIN = 2, mean)
+
+  IC <- lapply(rep_fits, function(x) get_element(x, "IC"))
+  IC <- Reduce("+", IC) / length(IC)
+
+  eval <- policy_eval_object(
+    coef = coef,
+    IC = IC,
+    type = get_element(args, "type"),
+    target = get_element(args, "target"),
+    id = get_id(policy_data),
+    name = name,
+    variance_type = variance_type,
+    cross_fit_type = cross_fit_type,
+    min_subgroup_size = get_element(args, "min_subgroup_size")
+  )
+
+  return(eval)
+
 }

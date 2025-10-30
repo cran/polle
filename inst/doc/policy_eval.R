@@ -89,17 +89,17 @@ pe_cf$folds$fold_1 |> head()
 pe_cf$cross_fits$fold_1
 
 ## ----demo_future, eval = FALSE------------------------------------------------
-#  library(future.apply)
-#  plan("multisession") # local parallel procession
-#  library("progressr") # progress bar
-#  handlers(global = TRUE)
-#  
-#  policy_eval(pd,
-#              policy_learn = policy_learn(type = "ql"),
-#              q_models = q_rf(),
-#              M = 20)
-#  
-#  plan("sequential") # resetting to sequential processing
+# library(future.apply)
+# plan("multisession") # local parallel procession
+# library("progressr") # progress bar
+# handlers(global = TRUE)
+# 
+# policy_eval(pd,
+#             policy_learn = policy_learn(type = "ql"),
+#             q_models = q_rf(),
+#             M = 20)
+# 
+# plan("sequential") # resetting to sequential processing
 
 ## ----sessionInfo--------------------------------------------------------------
 sessionInfo()

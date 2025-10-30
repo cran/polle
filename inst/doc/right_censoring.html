@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Right censoring/monotone coarsening</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">
+
+div.csl-bib-body { }
+div.csl-entry {
+clear: both;
+}
+.hanging div.csl-entry {
+margin-left:2em;
+text-indent:-2em;
+}
+div.csl-left-margin {
+min-width:2em;
+float:left;
+}
+div.csl-right-inline {
+margin-left:2em;
+padding-left:1em;
+}
+div.csl-indent {
+margin-left: 2em;
+}
+</style>
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Right censoring/monotone coarsening</h1>
+
+
+<div id="TOC">
+<ul>
+<li><a href="#target-parameter-under-discrete-time-right-censoringmonotone-coarsening" id="toc-target-parameter-under-discrete-time-right-censoringmonotone-coarsening">Target
+parameter under discrete time right-censoring/monotone
+coarsening</a></li>
+<li><a href="#efficient-estimation" id="toc-efficient-estimation">Efficient estimation</a></li>
+<li><a href="#adaption-to-continuous-time-right-censoring" id="toc-adaption-to-continuous-time-right-censoring">Adaption to
+continuous time right-censoring</a></li>
+<li><a href="#examples" id="toc-examples">Examples</a></li>
+<li><a href="#references" id="toc-references">References</a></li>
+</ul>
+</div>
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(polle)</span>
+<span id="cb1-2"><a href="#cb1-2" tabindex="-1"></a><span class="fu">library</span>(data.table)</span></code></pre></div>
+<div id="target-parameter-under-discrete-time-right-censoringmonotone-coarsening" class="section level2">
+<h2>Target parameter under discrete time right-censoring/monotone
+coarsening</h2>
+<p>For simplicity we consider a two-stage case with a binary action set
+<span class="math inline">\(\{0,1\}\)</span> at each stage and a final
+outcome <span class="math inline">\(U\)</span>.</p>
+<p>A full observation without right censoring is given by the temporally
+ordered variable <span class="math inline">\(O\)</span>:</p>
+<p><span class="math display">\[\begin{align*}
+O^F = \{B, X_1, A_1, X_2, A_2, X_3, U_3\},
+\end{align*}\]</span></p>
+<p>where <span class="math inline">\(B\)</span> denotes the baseline
+variables, <span class="math inline">\(X_1, X_2, X_3\)</span> denote the
+stage specific variables, <span class="math inline">\(U\)</span> denotes
+the outcome/utility, and <span class="math inline">\(A_1, A_2\)</span>
+denote the treatment actions.</p>
+<p>Now, introduce non-missingness indicators <span class="math inline">\(\Delta_1, \Delta_2, \Delta_3\)</span>. Under
+right-censoring, an observation is given by</p>
+<p><span class="math display">\[\begin{align*}
+O = \{B, X_1, \Delta_1, \Delta_1 A_1, \Delta_1 X_2,  \Delta_1
+\Delta_2,  \Delta_1 \Delta_2 A_2,  \Delta_1 \Delta_2 X_3,  \Delta_1
+\Delta_2\Delta_3, \Delta_1 \Delta_2 \Delta_3 U\}.
+\end{align*}\]</span></p>
+<p>For convenience, <span class="math inline">\(H_1 = \{B,
+X_1\}\)</span>, <span class="math inline">\(H_2 = \{B, X_1, A_1,
+X_2\}\)</span>, and <span class="math inline">\(H_3 = \{B, X_1, A_1,
+X_2, A_2, X_3\}\)</span>.</p>
+<p>The full data target parameter is still</p>
+<span class="math display">\[\begin{aligned}
+\mathbb{E}\left[ \left(\prod_{k=1}^2 \frac{I\{A_k = d_k(H_k\}
+}{g_{0,k}(H_k, A_k)} \right) U \right],
+\end{aligned}\]</span>
+<p>We assume the following (strong) sequential randomization for the
+right-censoring process:</p>
+<span class="math display">\[\begin{aligned}
+&amp;\Delta_3 \perp U | H_3, \Delta_1 = 1, \Delta_2 = 1\\
+&amp;\Delta_2 \perp \{A_2, X_3, \Delta_3, U\}| H_2, \Delta_1 = 1 \\
+&amp;\Delta_1 \perp \{A_1, X_2, \Delta_2, A_2, X_3, \Delta_3, U\} | H_1.
+\end{aligned}\]</span>
+<p>Under these assumptions it can be shown that our observed data target
+parameter is equal to the full data target parameter:</p>
+<span class="math display">\[\begin{aligned}
+&amp;\mathbb{E}\left[  \left(\prod_{k=1}^3 \frac{\Delta_k}{C_{0,k}(H_k)}
+\right) \left(\prod_{k=1}^2 \frac{I\{A_k = d_k(H_k\} }{g_{0,k}(H_k,
+A_k)} \right) U \right]\\ =&amp;\mathbb{E}\left[ \left(\prod_{k=1}^2
+\frac{I\{A_k = d_k(H_k\} }{g_{0,k}(H_k, A_k)} \right) U \right],
+\end{aligned}\]</span>
+where
+<span class="math display">\[\begin{aligned}
+C_{0,k}(h_k) = \mathbb{P}(\Delta_k = 1| H_k = h_k, \overline{\Delta}_k =
+1)
+\end{aligned}\]</span>
+<p>and</p>
+<span class="math display">\[\begin{aligned}
+g_{0,1}(H_1, a_1) &amp;= \mathbb{P}(A_1 = a_1|H_1, \Delta_1 = 1)
+=  \mathbb{P}(A_1 = a_1|H_1)\\
+g_{0,2}(H_2, a_2) &amp;= \mathbb{P}(A_2 = a_2|H_2, \Delta_1 = 1,
+\Delta_2 = 1) = \mathbb{P}(A_2 = a_2|H_2)
+\end{aligned}\]</span>
+Note the observed target parameter is also identified via the
+g-computation formula
+<span class="math display">\[\begin{aligned}
+\mathbb{E}[Q^d_{0,1}(H_1, d_1(H_1))],
+\end{aligned}\]</span>
+where
+<span class="math display">\[\begin{aligned}
+Q^d_{0,1}(h_1, d_1(h_1)) &amp;= \mathbb{E}[Q^d_{0,2}(H_2,
+d_2(H_2))|H_1=h_1, \Delta_1 = 1, A_1 = d(h_1)]\\
+Q^d_{0,2}(h_2, d_2(h_2)) &amp;= \mathbb{E}[Q^d_{0,3}(H_3)|H_2 = h_2,
+\Delta_1 = 1, \Delta_2 = 1, A_2 = d(h_2)]\\
+Q^d_{0,3}(h_3) &amp;= \mathbb{E}[U|H_3 = h_3, \Delta_1 = 1, \Delta_2 =
+2, \Delta_3 = 1].
+\end{aligned}\]</span>
+<p>Note that the observed target parameter can be seen as a 5-step
+inverse probability weighting expression, and that the associated
+g-computation formula can be reduced to 3 steps. This would not be the
+case if additional information was collected between <span class="math inline">\(\Delta_k\)</span> and <span class="math inline">\(A_k\)</span>.</p>
+</div>
+<div id="efficient-estimation" class="section level2">
+<h2>Efficient estimation</h2>
+<p>For the same reason the (un-centralized) efficient/robust score
+reduces to</p>
+<span class="math display">\[\begin{aligned}
+Z_1(d,&amp; g, Q^d, C)(O) \\
+&amp;= \,Q_{1}^{d}(H_1 , d_1(H_1))  \\
+&amp;+ \sum_{r = 1}^3 \left\{ \prod_{j = 1}^{r}
+\frac{\Delta_j}{C_j(H_j)} \frac{I\{A_j = d_j(H_{j})\}}{g_{j}(H_j, A_j)}
+\right\}\left\{Q_{r+1}^{d}(H_{r+1} , d_{r+1}(H_{r+1})) - Q_{r}^{d}(H_r ,
+d_r(H_r))\right\},
+\end{aligned}\]</span>
+where we set
+<span class="math display">\[\begin{aligned}
+\frac{I\{A_3 = d_3(H_{3})\}}{g_{3}(H_3, A_3)} = 1, \qquad
+Q_{4}^{d}(H_{4} , d_{4}(H_{4})) = U.
+\end{aligned}\]</span>
+<p>The above expression for the score by direct calculation of the
+efficient influence function for the observed target parameter or by
+utilizing a monotone coarsening argument, <span class="citation">Tsiatis
+(2006)</span> or <span class="citation">Laan and Robins
+(2003)</span>.</p>
+<p>A one-step estimator based on this score is implmented in polle via
+policy_eval().</p>
+</div>
+<div id="adaption-to-continuous-time-right-censoring" class="section level2">
+<h2>Adaption to continuous time right-censoring</h2>
+<p>Assume that <span class="math inline">\(A_1\)</span>, <span class="math inline">\(A_2\)</span>, <span class="math inline">\(U\)</span> occur at time points <span class="math inline">\(T_1 &lt; T_2 &lt; T_3\)</span>. Let <span class="math inline">\(C\)</span> denote an underlying censoring time
+point. Then we observe time points <span class="math inline">\(\tilde
+T_k = \min(T_k, C)\)</span> and non-misising indicators <span class="math inline">\(\Delta_k = \{T_k \leq C\}\)</span>. Note that with
+this temporal structure <span class="math inline">\(\prod_{j = 1}^k
+\Delta_j = \Delta_k\)</span>. For notational convenience we include
+<span class="math inline">\(\tilde T_k\)</span> in the state variable
+<span class="math inline">\(X_k\)</span>.</p>
+<p>Now, let <span class="math inline">\(C_k\)</span> denote a survival
+model for the censoring process:</p>
+<span class="math display">\[\begin{aligned}
+C_{0,k}(\tilde T_k|H_k) = \mathbb{P}(C &gt; T_k|H_k, C \geq \tilde
+T_{k-1})
+\end{aligned}\]</span>
+<span class="math display">\[\begin{aligned}
+Z_1(d,&amp; g, Q^d, C)(O) \\
+&amp;= \,Q_{1}^{d}(H_1 , d_1(H_1))  \\
+&amp;+ \sum_{r = 1}^3 \left\{ \prod_{j = 1}^{r}
+\frac{\Delta_j}{C_j(\tilde T_j|H_j)} \frac{I\{A_j =
+d_j(H_{j})\}}{g_{j}(H_j, A_j)} \right\}\left\{Q_{r+1}^{d}(H_{r+1} ,
+d_{r+1}(H_{r+1})) - Q_{r}^{d}(H_r , d_r(H_r))\right\}.
+\end{aligned}\]</span>
+<p>We note that this score adapted to handle continuous right-censroing
+is not the efficient score which incorporate the induced temporal
+structure. A study of the second order remainder terms yields that for
+correctly specified nuisance models for <span class="math inline">\(g_0,
+Q^d_0, C_0\)</span>, under reasonable convergence rate assumptions, the
+associated one-step estimator has asymptotic variance as induced by the
+influence function <span class="math inline">\(Z_1(d,g_0, Q^d_0, C_0)(O)
+- \mathbb{E}[Z_1(d,g_0, Q^d_0, C_0)(O)]\)</span>.</p>
+</div>
+<div id="examples" class="section level2">
+<h2>Examples</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>sim_single_stage_right_cens <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">n =</span> <span class="fl">2e3</span>, <span class="at">zeta =</span> <span class="fu">c</span>(<span class="fl">0.7</span>, <span class="fl">0.2</span>), <span class="at">type =</span> <span class="st">&quot;right&quot;</span>){</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>  d <span class="ot">&lt;-</span> <span class="fu">sim_single_stage</span>(<span class="at">n =</span> n)</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  pd <span class="ot">&lt;-</span> <span class="fu">policy_data</span>(<span class="at">data =</span> d,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>                    <span class="at">action =</span> <span class="st">&quot;A&quot;</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>                    <span class="at">covariates =</span> <span class="fu">c</span>(<span class="st">&quot;Z&quot;</span>, <span class="st">&quot;L&quot;</span>, <span class="st">&quot;B&quot;</span>),</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>                    <span class="at">utility =</span> <span class="st">&quot;U&quot;</span>)</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>  ld <span class="ot">&lt;-</span> pd<span class="sc">$</span>stage_data</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a>  ld[stage <span class="sc">==</span> <span class="dv">1</span>, time <span class="sc">:=</span> <span class="dv">1</span>]</span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a>  ld[stage <span class="sc">==</span> <span class="dv">2</span>, time <span class="sc">:=</span> <span class="dv">2</span>]</span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a>  ld[stage <span class="sc">==</span> <span class="dv">2</span>, Z <span class="sc">:=</span> d<span class="sc">$</span>Z]</span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>  ld[stage <span class="sc">==</span> <span class="dv">2</span>, L <span class="sc">:=</span> d<span class="sc">$</span>L]</span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>  ld[stage <span class="sc">==</span> <span class="dv">2</span>, B <span class="sc">:=</span> d<span class="sc">$</span>B]</span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a></span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>  <span class="do">## simulating the right censoring time</span></span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a>  <span class="do">## only depending on the baseline covariate Z:</span></span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>  C <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="fu">rexp</span>(n, <span class="dv">1</span>) <span class="sc">/</span> <span class="fu">exp</span>((<span class="sc">-</span><span class="dv">1</span>) <span class="sc">*</span> <span class="fu">cbind</span>(<span class="dv">1</span>, <span class="fu">as.numeric</span>(d<span class="sc">$</span>Z)) <span class="sc">%*%</span> zeta))</span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a></span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a>  ld[stage <span class="sc">==</span> <span class="dv">1</span>, time_c <span class="sc">:=</span> C]</span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a>  ld[stage <span class="sc">==</span> <span class="dv">2</span>, time_c <span class="sc">:=</span> C]</span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a></span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>  ld[, delta <span class="sc">:=</span> time_c <span class="sc">&gt;=</span> time]</span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a></span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a>  ld[delta <span class="sc">==</span> <span class="cn">FALSE</span> , event <span class="sc">:=</span> <span class="dv">2</span>]</span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a>  ld[delta <span class="sc">==</span> <span class="cn">FALSE</span>, A <span class="sc">:=</span> <span class="cn">NA</span>]</span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a>  ld[delta <span class="sc">==</span> <span class="cn">FALSE</span> <span class="sc">&amp;</span> stage <span class="sc">==</span> <span class="dv">2</span>, U <span class="sc">:=</span> <span class="cn">NA</span>]</span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a>  ld[delta <span class="sc">==</span> <span class="cn">FALSE</span>, U_A0 <span class="sc">:=</span> <span class="dv">0</span>]</span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a>  ld[delta <span class="sc">==</span> <span class="cn">FALSE</span>, U_A1 <span class="sc">:=</span> <span class="dv">0</span>]</span>
+<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a></span>
+<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a>  ld[ , tmp <span class="sc">:=</span> <span class="fu">shift</span>(delta, <span class="at">fill =</span> <span class="cn">TRUE</span>), by <span class="ot">=</span> <span class="fu">list</span>(id)]</span>
+<span id="cb2-34"><a href="#cb2-34" tabindex="-1"></a>  ld <span class="ot">&lt;-</span> ld[tmp <span class="sc">==</span> <span class="cn">TRUE</span>, ]</span>
+<span id="cb2-35"><a href="#cb2-35" tabindex="-1"></a>  ld[ , time <span class="sc">:=</span> <span class="fu">pmin</span>(time, time_c)]</span>
+<span id="cb2-36"><a href="#cb2-36" tabindex="-1"></a>  ld[ , time_c <span class="sc">:=</span> <span class="cn">NULL</span>]</span>
+<span id="cb2-37"><a href="#cb2-37" tabindex="-1"></a>  ld[ , tmp <span class="sc">:=</span> <span class="cn">NULL</span>]</span>
+<span id="cb2-38"><a href="#cb2-38" tabindex="-1"></a>  ld[ , delta <span class="sc">:=</span> <span class="cn">NULL</span>]</span>
+<span id="cb2-39"><a href="#cb2-39" tabindex="-1"></a></span>
+<span id="cb2-40"><a href="#cb2-40" tabindex="-1"></a>  <span class="cf">if</span> (type <span class="sc">==</span> <span class="st">&quot;interval&quot;</span>){</span>
+<span id="cb2-41"><a href="#cb2-41" tabindex="-1"></a>    ld[, time2 <span class="sc">:=</span> time]</span>
+<span id="cb2-42"><a href="#cb2-42" tabindex="-1"></a>    ld[, time <span class="sc">:=</span> <span class="fu">shift</span>(time, <span class="at">fill =</span> <span class="dv">0</span>), by <span class="ot">=</span> <span class="fu">list</span>(id)]</span>
+<span id="cb2-43"><a href="#cb2-43" tabindex="-1"></a>  }</span>
+<span id="cb2-44"><a href="#cb2-44" tabindex="-1"></a></span>
+<span id="cb2-45"><a href="#cb2-45" tabindex="-1"></a>  <span class="fu">return</span>(ld)</span>
+<span id="cb2-46"><a href="#cb2-46" tabindex="-1"></a>}</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>ld <span class="ot">&lt;-</span> <span class="fu">sim_single_stage_right_cens</span>(<span class="at">n =</span> <span class="fl">5e2</span>, <span class="at">type =</span> <span class="st">&quot;interval&quot;</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>pd <span class="ot">&lt;-</span> <span class="fu">policy_data</span>(<span class="at">data =</span> ld, <span class="at">type =</span> <span class="st">&quot;long&quot;</span>, <span class="at">action =</span> <span class="st">&quot;A&quot;</span>, <span class="at">time =</span> <span class="st">&quot;time&quot;</span>, <span class="at">time2 =</span> <span class="st">&quot;time2&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>pe <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">policy_data =</span> pd,</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">policy =</span> <span class="fu">policy_def</span>(<span class="dv">1</span>),</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">m_model =</span> <span class="fu">q_glm</span>(<span class="sc">~</span> .),</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">m_full_history =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>  <span class="at">c_models =</span> <span class="fu">list</span>(<span class="fu">c_cox</span>(<span class="at">formula =</span> <span class="sc">~</span> Z_1),</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>                  <span class="fu">c_cox</span>(<span class="at">formula =</span> <span class="sc">~</span> Z_2<span class="sc">*</span>A_1)),</span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  <span class="at">c_full_history =</span> <span class="cn">TRUE</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>)</span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a>pe</span></code></pre></div>
+<pre><code>##         Estimate Std.Err  2.5%  97.5%   P-value
+## E[U(d)]   -3.092   0.443 -3.96 -2.224 2.959e-12</code></pre>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>pe <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="at">policy_data =</span> pd,</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="at">policy_learn =</span> <span class="fu">policy_learn</span>(<span class="at">type =</span> <span class="st">&quot;blip&quot;</span>, <span class="at">control =</span> <span class="fu">control_blip</span>()),</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">m_model =</span> <span class="fu">q_glm</span>(<span class="sc">~</span>.),</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">m_full_history =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">c_models =</span> <span class="fu">c_cox</span>(<span class="at">formula =</span> <span class="sc">~</span> Z)</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>)</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>pe</span></code></pre></div>
+<pre><code>##                        Estimate Std.Err     2.5%  97.5% P-value
+## E[U(d)]: d=blip(eta=0)   0.3275  0.2114 -0.08694 0.7419  0.1214</code></pre>
+</div>
+<div id="references" class="section level1 unnumbered">
+<h1 class="unnumbered">References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent">
+<div id="ref-laan2003unified" class="csl-entry">
+Laan, Mark J, and James M Robins. 2003. <em>Unified Methods for Censored
+Longitudinal Data and Causality</em>. Springer.
+</div>
+<div id="ref-tsiatis2006semiparametric" class="csl-entry">
+Tsiatis, Anastasios A. 2006. <em>Semiparametric Theory and Missing
+Data</em>. Vol. 4. Springer.
+</div>
+</div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js?config=TeX-AMS_CHTML.js";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

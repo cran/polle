@@ -172,7 +172,7 @@ test_that("policy_eval checks inputs.", {
   )
 
   gfun <- fit_g_functions(pd, g_glm(), FALSE)
-  qfun <- fit_Q_functions(pd, q_models = q_glm(), policy_actions = p(pd))
+  qfun <- fit_Q_functions(pd, q_models = q_glm(), policy_actions = p(pd), m_function = NULL)
 
   ## g-functions
   expect_error(
@@ -207,7 +207,7 @@ test_that("policy_eval checks inputs.", {
       policy = p,
       q_functions = gfun
     ),
-    "q-functions must be of class 'q_functions'."
+    "q_functions must be of class 'q_functions'."
   )
 
   ## M: cross-fitting
@@ -259,6 +259,88 @@ test_that("policy_eval checks inputs.", {
   })
 })
 
+test_that("policy_eval handles combinations of nuisance models and functions correctly.", {
+
+  d <- sim_single_stage(1e2, seed = 1)
+  pd <- policy_data(d, action = "A", covariates = c("Z"), utility = "U")
+  p <- policy_def(1)
+
+  ## g-models and g-functions:
+  gf <- fit_g_functions(pd, g_models = g_glm(~1))
+
+  expect_error(
+    pe <- policy_eval(pd, policy = p, g_functions = NULL, g_models = NULL),
+    "Provide either g_functions or g_models."
+  )
+
+  expect_no_error(
+    pe <- policy_eval(pd, policy = p, g_functions = gf, g_models = g_glm(~Z))
+  )
+  ## if a g-function is provided, the g-model is ignored
+  expect_equal(
+    get_g_functions(pe),
+    gf
+  )
+  expect_equal(
+    pe$g_values,
+    predict.nuisance_functions(gf, new_policy_data = pd)
+  )
+
+  ## cross-fitting
+  expect_no_error(
+    pe <- policy_eval(pd, policy = p, g_functions = gf, g_models = g_glm(~Z), M = 2)
+  )
+  ## if a g-function is provided, the g-model is ignored
+  expect_equal(
+    pe$cross_fits$fold_1$g_functions,
+    gf
+  )
+  expect_equal(
+    pe$g_values,
+    predict.nuisance_functions(gf, new_policy_data = pd)
+  )
+  rm(gf, pe)
+
+  ## q-models and q-functions:
+  qf <- fit_Q_functions(pd, policy_actions = p(pd), q_models = q_glm(~1))
+
+  expect_error(
+    pe <- policy_eval(pd, policy = p, q_functions = NULL, q_models = NULL),
+    "Provide either q_functions or q_models."
+  )
+
+  expect_no_error(
+    pe <- policy_eval(pd, policy = p, q_functions = qf, q_models = q_glm(~Z))
+  )
+
+  ## if a g-function is provided, the g-model is ignored
+  expect_equal(
+    get_q_functions(pe),
+    qf
+  )
+
+  expect_equal(
+    pe$q_values,
+    predict.nuisance_functions(qf, new_policy_data = pd)
+  )
+
+  ## cross-fitting
+  expect_no_error(
+    pe <- policy_eval(pd, policy = p, q_functions = qf, q_models = q_glm(~Z), M = 2)
+  )
+
+  ## if a g-function is provided, the g-model is ignored
+  expect_equal(
+    pe$cross_fits$fold_1$q_functions,
+    qf
+  )
+  expect_equal(
+    pe$q_values,
+    predict.nuisance_functions(qf, new_policy_data = pd)
+  )
+
+})
+
 test_that("policy_eval runs on a subset of the data with missing actions from the action set.", {
   d1 <- sim_single_stage(1e2, seed = 1)
   pd1 <- policy_data(d1, action = "A", covariates = c("Z"), utility = "U")
@@ -280,7 +362,7 @@ test_that("policy_eval runs on a subset of the data with missing actions from th
     NA
   )
   expect_equal(
-    coef(pe2_ipw),
+    coef(pe2_ipw) |> unname(),
     0
   )
   expect_equal(
@@ -397,7 +479,7 @@ test_that("policy_eval with target = 'value' runs when cross-fitting.", {
   )
 })
 
-test_that("policy_eval with target = 'value' agrees with targeted::lava", {
+test_that("policy_eval with target = 'value' agrees with targeted::cate in the single-stage case.", {
   d <- sim_single_stage(1e2, seed = 1)
   pd <- policy_data(d, action = "A", covariates = c("Z"), utility = "U")
   p <- policy_def(1)
@@ -423,12 +505,12 @@ test_that("policy_eval with target = 'value' agrees with targeted::lava", {
 
   set.seed(1)
   ca_dml2 <- targeted::cate(
-    treatment = A ~ 1,
-    response_model = U ~ A * Z,
-    propensity_model = A ~ Z,
-    type = "dml2",
+    cate.model = A ~ 1,
+    response.model = U ~ A * Z,
+    propensity.model = A ~ Z,
     data = d,
     nfolds = 2,
+    second.order = FALSE,
     contrast = 1
   )
 
@@ -442,7 +524,7 @@ test_that("policy_eval with target = 'value' agrees with targeted::lava", {
 
   expect_equal(
     coef(ca_dml2$estimate)["(Intercept)"] |> unname(),
-    coef(pe_dml2)
+    coef(pe_dml2) |> unname()
   )
 
   expect_equal(
@@ -470,7 +552,7 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
   ## qfun <- fit_Q_function(history = his, Q = d$y, q_degen(var = "z"))
   ## predict.Q_function(qfun, new_history = his)
 
-  p <- policy_def(function(p) p)
+  p <- policy_def(function(p) p, name = "test")
 
   ref_pe <- mean((d$a == d$p) / 0.5 * (d$y - d$z) + d$z)
   ref_IC <- (d$a == d$p) / 0.5 * (d$y - d$z) + d$z - ref_pe
@@ -487,7 +569,16 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
   )
 
   expect_equal(
-    coef(pe),
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=test")
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
     ref_pe
   )
 
@@ -510,10 +601,19 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
     q_models = q_degen(var = "z"),
     g_functions = gf,
     M = 2,
+    )
+
+  expect_equal(
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=test")
   )
 
   expect_equal(
-    coef(pe),
+    coef(pe) |> unname(),
     ref_pe
   )
 
@@ -552,7 +652,16 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
   }
 
   expect_equal(
-    coef(pe),
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=test")
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
     ref_pe
   )
 
@@ -579,7 +688,7 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
   ref_IC <- (d$a == d$p) / 0.5 * (d$y - d$z) + d$z - ref_pe
 
   expect_equal(
-    coef(pe),
+    coef(pe) |> unname(),
     ref_pe
   )
 
@@ -587,6 +696,68 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
     IC(pe),
     matrix(ref_IC)
   )
+})
+
+test_that("policy_eval passes nuisance models to policy_learn correctly", {
+  d <- sim_single_stage(1e2, seed = 1)
+  pd <- policy_data(d, action = "A", covariates = c("Z"), utility = "U")
+
+  ## g-models and g-functions
+  pl <- policy_learn(type = "blip", control = control_blip(), alpha = 0.05)
+  gf <- fit_g_functions(pd, g_models = g_glm(~1))
+  expect_no_error(
+    pe <- policy_eval(pd,
+                      policy_learn = pl,
+                      g_functions = gf,
+                      g_models = g_glm(~Z)) # g_models are ignored with no cross-fitting
+  )
+  po <- get_policy_object(pe)
+  expect_equal(
+    po$g_functions,
+    gf
+  )
+
+  pl <- policy_learn(type = "blip", control = control_blip(), alpha = 0.05, L = 2, save_cross_fit_models = TRUE)
+  expect_no_error(
+    pe <- policy_eval(pd,
+                      policy_learn = pl,
+                      g_functions = gf,     # g_functions are used within policy_eval
+                      g_models = g_glm(~Z)) # g_models are used within policy_learn
+  )
+
+  po <- get_policy_object(pe)
+  expect_equal(
+    gf,
+    get_g_functions(pe)
+  )
+  expect_equal(
+    predict.nuisance_functions(gf, new_policy_data = pd),
+    pe$g_values
+  )
+  tmp <- glm(A ~ Z, family = binomial, data = d[-po$folds[[1]],])
+  tmp2 <- po$g_functions_cf[[1]]$all_stages
+  expect_equal(
+    coef(tmp) |> unname(),
+    coef(tmp2$g_model$model) |> unname()
+  )
+
+  ## q-models and q-functions
+  pl <- policy_learn(type = "blip", control = control_blip(), alpha = 0.05)
+  qf <- fit_Q_functions(pd, policy_actions = policy_def(1)(pd), q_models = q_glm(~A))
+  expect_no_error(
+    pe <- policy_eval(pd,
+                      policy_learn = pl,
+                      q_functions = qf,
+                      q_models = q_glm(~A+Z)) # q_models are NOT ignored even when a Q-function is provided.
+  )
+  po <- get_policy_object(pe)
+  expect_true(
+    !identical(
+      po$q_functions$stage_1$q_model$model |> coef() |> unname(),
+      qf$stage_1$q_model$model |> coef() |> unname()
+    )
+  )
+
 })
 
 test_that("policy_eval() using policy_learn() has the correct output", {
@@ -620,8 +791,17 @@ test_that("policy_eval() using policy_learn() has the correct output", {
   )
 
   expect_equal(
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=blip(eta=75)")
+  )
+
+  expect_equal(
     ref_pe,
-    coef(pe)
+    coef(pe) |> unname()
   )
   expect_equal(
     IC(pe),
@@ -629,7 +809,225 @@ test_that("policy_eval() using policy_learn() has the correct output", {
   )
 })
 
+test_that("policy_eval with target 'value' has the correct outputs for the fixed two-stage case and a single final utility outcome.", {
+
+  set.seed(1)
+  x1 <- runif(n = 1e2, min = -1, max = 1)
+  a1 <- c(rep(1, 50), rep(2, 50))
+  x2 <- runif(n = 1e2, min = -1, max = 1)
+  a2 <- c(rep(3, 50), rep(4, 50))
+  y <- a1 * x1 + a2 * x2 + runif(n = 1e2, min = -1, max = 1)
+  p1 <- c(rep(1, 25), rep(2, 25), rep(1, 25), rep(2, 25))
+  p2 <- c(rep(3, 25), rep(4, 25), rep(3, 25), rep(4, 25))
+  d <- data.table(x1 = x1,
+                  a1 = a1,
+                  x2 = x2,
+                  a2 = a2,
+                  y = y,
+                  p1 = p1,
+                  p2 = p2)
+  rm(x1, a1, x2, a2, y)
+
+  pd <- policy_data(
+    data = d,
+    action = c("a1", "a2"),
+    covariates = list(x = c("x1", "x2"),
+                      p = c("p1", "p2")),
+    utility = c("y")
+  )
+
+  ## his <- get_history(pd, stage = 1)
+  ## qfun <- fit_Q_function(history = his, Q = d$y, q_degen(var = "z"))
+  ## predict.Q_function(qfun, new_history = his)
+
+  p <- policy_def(function(p) p, name = "test", reuse = TRUE)
+
+  ref_pe <- mean(
+    d$x1 +
+    (d$a1 == d$p1) / 0.5 * (d$x2 - d$x1) +
+    (d$a1 == d$p1) / 0.5 * (d$a1 == d$p1) / 0.5 * (d$y - d$x2)
+  )
+
+  ref_IC <- d$x1 +
+    (d$a1 == d$p1) / 0.5 * (d$x2 - d$x1) +
+    (d$a1 == d$p1) / 0.5 * (d$a1 == d$p1) / 0.5 * (d$y - d$x2 ) -
+    ref_pe
+
+  ##
+  ## no cross-fitting
+  ##
+
+  pe <- policy_eval(
+    policy_data = pd,
+    policy = p,
+    q_models = list(q_degen(var = "x"), q_degen(var = "x")),
+    g_models = list(g_glm(~1), g_glm(~1))
+  )
+
+  expect_equal(
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=test")
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
+    ref_pe
+  )
+
+  expect_equal(
+    IC(pe),
+    matrix(ref_IC)
+  )
+
+})
+
+test_that("policy_eval with target 'value' has the correct outputs for the stochastic two-stage case and a single final utility outcome.", {
+
+  set.seed(1)
+  x1 <- runif(n = 1e2, min = -1, max = 1)
+  a1 <- c(rep(1, 50), rep(2, 50))
+  x2 <- runif(n = 1e2, min = -1, max = 1)
+  a2 <- c(rep(3, 50), rep(4, 50))
+  y <- a1 * x1 + a2 * x2 + runif(n = 1e2, min = -1, max = 1)
+  p1 <- c(rep(1, 25), rep(2, 25), rep(1, 25), rep(2, 25))
+  p2 <- c(rep(3, 25), rep(4, 25), rep(3, 25), rep(4, 25))
+  m <- rbinom(n = 1e2, size = 1, prob = 0.5) # stage 2 missing indicator
+  d <- data.table(x1 = x1,
+                  a1 = a1,
+                  x2 = x2,
+                  a2 = a2,
+                  y = y,
+                  p1 = p1,
+                  p2 = p2,
+                  m = m)
+  rm(x1, a1, x2, a2, y)
+
+  pd <- policy_data(
+    data = d,
+    action = c("a1", "a2"),
+    covariates = list(x = c("x1", "x2"),
+                      p = c("p1", "p2")),
+    utility = c("y")
+  )
+
+  gf <- fit_g_functions(pd, g_models = list(g_glm(~1), g_glm(~1)))
+
+  ld <- pd$stage_data
+  ld[stage == 2, m := m]
+  ld[, m := nafill(m, fill = 0)]
+  ld <- ld[m == 0, ]
+  ld[ , stage := 1:.N, by = id]
+  setkey(ld, id, stage)
+  ld[ , m := NULL]
+
+  pd <- policy_data(data = ld, type = "long")
+
+  p <- policy_def(function(p) p, name = "test", reuse = TRUE)
+
+  ref_pe <- mean(d$x1 +
+                 (d$a1 == d$p1) / 0.5 * (((d$m == 0) * d$x2 + (d$m == 1) * d$y) - d$x1) +
+                 (d$m == 0) * (d$a1 == d$p1) / 0.5 * (d$a2 == d$p2) / 0.5 * (d$y - d$x2))
+
+  ref_IC <-  (d$x1 +
+              (d$a1 == d$p1) / 0.5 * (((d$m == 0) * d$x2 + (d$m == 1) * d$y) - d$x1) +
+              (d$m == 0) * (d$a1 == d$p1) / 0.5 * (d$a2 == d$p2) / 0.5 * (d$y - d$x2) -
+              ref_pe)
+
+  ref_pe_or <- mean(d$x1)
+
+  ref_pe_ipw <- mean((d$a1 == d$p1) / 0.5 * (d$m == 0) * (d$a2 == d$p2) / 0.5 *  d$y)
+
+  ##
+  ## no cross-fitting
+  ##
+
+  pe <- policy_eval(
+    policy_data = pd,
+    policy = p,
+    q_models = list(q_degen(var = "x"), q_degen(var = "x")),
+    g_functions = gf
+  )
+
+  expect_equal(
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=test")
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
+    ref_pe
+  )
+
+  expect_equal(
+    IC(pe),
+    matrix(ref_IC)
+  )
+
+  expect_equal(
+    get_element(pe, "coef_or"),
+    ref_pe_or
+  )
+
+  expect_equal(
+    get_element(pe, "coef_ipw"),
+    ref_pe_ipw
+  )
+
+  ##
+  ## cross-fitting
+  ##
+
+  pe <- policy_eval(
+    policy_data = pd,
+    policy = p,
+    q_models = list(q_degen(var = "x"), q_degen(var = "x")),
+    g_functions = gf,
+    M = 2
+  )
+
+  expect_equal(
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=test")
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
+    ref_pe
+  )
+
+  expect_equal(
+    IC(pe),
+    matrix(ref_IC)
+  )
+
+  expect_equal(
+    get_element(pe, "coef_or"),
+    ref_pe_or
+  )
+
+  expect_equal(
+    get_element(pe, "coef_ipw"),
+    ref_pe_ipw
+  )
+
+
+})
+
+
 test_that("policy_eval() return estimates for multiple policies associated with multiple thresholds.", {
+
   z <- 1:1e2
   a <- c(rep(1, 50), rep(2, 50))
   y <- a * 2
@@ -682,8 +1080,17 @@ test_that("policy_eval() return estimates for multiple policies associated with 
     )
   })
   expect_equal(
-    coef(pe),
+    coef(pe) |> unname(),
     ref_pe
+  )
+
+  expect_equal(
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=blip(eta=28)", "E[U(d)]: d=blip(eta=76)")
   )
 
   ##
@@ -691,18 +1098,28 @@ test_that("policy_eval() return estimates for multiple policies associated with 
   ##
 
   ## cross fit estimate types
-expect_no_error({
+  expect_no_error({
     pe <- policy_eval(
       policy_data = pd,
       policy_learn = pl,
       M = 3,
-     cross_fit_type = "pooled",
+      cross_fit_type = "pooled",
       q_models = q_degen(var = "z"),
       g_functions = gf
     )
   })
+
   expect_equal(
-    coef(pe),
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=blip(eta=28)", "E[U(d)]: d=blip(eta=76)")
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
     ref_pe
   )
 
@@ -711,13 +1128,13 @@ expect_no_error({
       policy_data = pd,
       policy_learn = pl,
       M = 3,
-     cross_fit_type = "stacked",
+      cross_fit_type = "stacked",
       q_models = q_degen(var = "z"),
       g_functions = gf
     )
   })
   expect_equal(
-    coef(pe),
+    coef(pe) |> unname(),
     ref_pe
   )
   
@@ -731,8 +1148,18 @@ expect_no_error({
       g_functions = gf
     )
   })
+
   expect_equal(
-    coef(pe),
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=blip(eta=28)", "E[U(d)]: d=blip(eta=76)")
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
     ref_pe
   )
 
@@ -746,8 +1173,18 @@ expect_no_error({
       g_functions = gf
     )
   })
+
   expect_equal(
-    coef(pe),
+    pe$name,
+    names(coef(pe))
+  )
+  expect_equal(
+    pe$name,
+    c("E[U(d)]: d=blip(eta=28)", "E[U(d)]: d=blip(eta=76)")
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
     ref_pe
   )
 
@@ -762,12 +1199,13 @@ expect_no_error({
     )
   })
   expect_equal(
-    coef(pe),
+    coef(pe) |> unname(),
     ref_pe
   )
+
 })
 
-test_that("conditional.policy_eval agrees with targeted::CATE", {
+test_that("conditional.policy_eval agrees with targeted::cate", {
   n <- 1e3
   B <- rbinom(n = n, size = 1, prob = 0.5)
   Z <- rnorm(n = n)
@@ -809,13 +1247,13 @@ test_that("conditional.policy_eval agrees with targeted::CATE", {
   ## implementation from the targeted package:
   library(targeted)
 
-  ca <- cate(
-    treatment = A ~ factor(B) - 1,
-    response = U ~ A * Z,
-    propensity_model = A ~ 1,
+  ca <- targeted::cate(
+    cate.model = A ~ factor(B) - 1,
+    response.model = U ~ A * Z,
+    propensity.model = A ~ 1,
+    second.order = FALSE,
     data = d,
     nfolds = 1,
-    type = "dml2"
   )
 
   expect_equal(
@@ -826,5 +1264,162 @@ test_that("conditional.policy_eval agrees with targeted::CATE", {
   expect_equal(
     IC(est) |> matrix(),
     ca$estimate$IC[, "factor(B)0"] |> unname() |> matrix()
+  )
+})
+
+test_that("policy_eval with target = 'value' runs when performing repeated cross-fitting.", {
+
+  z <- 1:1e2
+  a <- c(rep(1, 50), rep(2, 50))
+  y <- a * 2
+  p <- c(rep(1, 25), rep(2, 25), rep(1, 25), rep(2, 25))
+  d <- data.table(z = z, a = a, y = y, p = p)
+  rm(a, z, y)
+  pd <- policy_data(
+    data = d,
+    action = "a",
+    covariates = c("z", "p"),
+    utility = c("y")
+  )
+  p <- policy_def(function(p) p, name = "test")
+
+  ref_pe <- mean((d$a == d$p) / 0.5 * (d$y - d$z) + d$z)
+  ref_IC <- (d$a == d$p) / 0.5 * (d$y - d$z) + d$z - ref_pe
+
+  gf <- fit_g_functions(pd, g_models = g_glm(~1))
+  set.seed(1)
+  expect_no_error(
+    pe <- policy_eval(
+      policy_data = pd,
+      policy = p,
+      M = 2,
+      nrep = 2,
+      q_models = q_degen(var = "z"),
+      g_functions = gf
+    )
+  )
+
+  expect_equal(
+    coef(pe) |> unname(),
+    ref_pe
+  )
+
+  expect_equal(
+    IC(pe),
+    matrix(ref_IC)
+  )
+
+  z <- 1:1e2
+  a <- c(rep(1, 50), rep(2, 50))
+  y <- a * 2
+  p1 <- (z > 28) + 1
+  p2 <- (z > 76) + 1
+  d <- data.table(z = z, a = a, y = y, p1 = p1, p2 = p2)
+  rm(a, z, y, p1, p2)
+  pd <- policy_data(
+    data = d,
+    action = "a",
+    covariates = c("z"),
+    utility = c("y")
+  )
+
+  gf <- fit_g_functions(pd, g_models = g_glm(~1))
+
+  ref_pe1 <- mean((d$a == d$p1) / 0.5 * (d$y - d$z) + d$z)
+  ## pooled IC
+  ref_IC1 <- matrix((d$a == d$p1) / 0.5 * (d$y - d$z) + d$z - ref_pe1)
+
+  ref_pe2 <- mean((d$a == d$p2) / 0.5 * (d$y - d$z) + d$z)
+  ref_IC2 <- matrix((d$a == d$p2) / 0.5 * (d$y - d$z) + d$z - ref_pe2)
+
+  ref_pe <- c(ref_pe1, ref_pe2)
+  ref_IC <- cbind(ref_IC1, ref_IC2)
+
+
+  pl <- policy_learn(
+    type = "blip",
+    control = control_blip(blip_models = q_degen(var = "z")),
+    threshold = c(28, 76)
+  )
+
+  expect_no_error({
+    pe <- policy_eval(
+      policy_data = pd,
+      policy_learn = pl,
+      q_models = q_degen(var = "z"),
+      g_functions = gf,
+      nrep = 2,
+      M = 2
+    )
+  })
+
+  expect_equal(
+    coef(pe) |> unname(),
+    ref_pe
+  )
+
+  expect_equal(
+    IC(pe),
+    ref_IC
+  )
+})
+
+test_that("policy_eval() runs without covariates.", {
+
+  a <- c(rep(1, 50), rep(2, 50))
+  y <- a * 2
+  d <- data.table(a = a, y = y)
+  rm(a, y)
+  pd <- policy_data(
+    data = d,
+    action = "a",
+    utility = c("y")
+  )
+  p <- policy_def("2", name = "test")
+
+  expect_no_error(
+    pe <- policy_eval(
+      policy_data = pd,
+      policy = p,
+      q_models = q_glm(~A),
+      g_models = g_glm(~1)
+    )
+  )
+
+  ref_pe <- mean((d$a == "2") / 0.5 * d$y)
+  ref_IC <- matrix((d$a == "2") / 0.5 * (d$y - 4) + 4 - ref_pe)
+
+  expect_equal(
+    coef(pe) |> unname(),
+    ref_pe
+  )
+
+  expect_equal(
+    IC(pe),
+    ref_IC,
+    tolerance = 1e-14
+  )
+
+  expect_no_error(
+    pe <- policy_eval(
+      policy_data = pd,
+      policy = p,
+      q_models = q_glm(~1),
+      g_models = g_glm(~1)
+    )
+  )
+
+  ref_pe <- mean((d$a == "2") / 0.5 * d$y)
+  ref_IC <- matrix((d$a == "2") / 0.5 * (d$y - 3) + 3 - ref_pe)
+
+  expect_equal(
+    coef(pe) |> unname(),
+    ref_pe
+  )
+
+  expect_equal(
+    IC(pe),
+    ref_IC,
+    tolerance = 1e-14
   )
 })

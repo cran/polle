@@ -1,35 +1,72 @@
-check_g_formula <- function(formula, data){
+check_formula <- function(formula, data, call = "") {
   tt <- terms(formula, data = data)
-  if (length(attr(tt, "term.labels")) == 0)
-    return(NULL)
-  formula <- reformulate(attr(tt, "term.labels"), response = NULL)
-  tt <- terms(formula, data = data)
-  v <- all.vars(tt)
-  if(!all(v %in% colnames(data))){
-    mes <- deparse(formula)
-    mes <- paste("The g-model formula", mes, "is invalid.")
-    stop(mes)
+  if (length(attr(tt, "term.labels")) > 0) {
+    formula <- reformulate(attr(tt, "term.labels"), response = NULL)
+    tt <- terms(formula, data = data)
+    all_vars <- all.vars(tt)
+    data_names <- colnames(data)
+    if (!all(all_vars %in% data_names)) {
+      missing_vars <- all_vars[!all_vars %in% data_names]
+
+      if (length(missing_vars) > 0) {
+
+        formula_str <- deparse(formula, width.cutoff = 500L)
+        formula_str <- paste(formula_str, collapse = "")
+
+
+        if (length(missing_vars) == 1) {
+          missing_text <- paste0("variable '", missing_vars, "' is")
+        } else {
+          missing_text <- paste0("variables '",
+                                 paste(missing_vars, collapse = "', '"),
+                                 "' are")
+        }
+
+        call_text <- if (nchar(call) > 0) paste0("when calling '", call, "' ") else ""
+
+        error_msg <- paste0(missing_text, " not found in data ",
+                            call_text, "with formula: ", formula_str)
+
+
+        err <- simpleError(error_msg)
+        err$missing_variables <- missing_vars
+        err$available_variables <- data_names
+        err$formula <- formula
+        err$call_context <- call
+
+        stop(err)
+      }
+    }
   }
 }
 
 update_g_formula <- function(formula, A, H) {
+  if (!inherits(formula, "formula")) {
+    stop("'formula' must be a formula object")
+  }
+
   action_set <- sort(unique(A))
   if (length(action_set) != 2)
     stop("g_glm requires exactly two levels.")
-  AA <- A
-  AA[A == action_set[1]] <- 0
-  AA[A == action_set[2]] <- 1
-  AA <- as.numeric(AA)
+  AA_ <- A
+  AA_[A == action_set[1]] <- 0
+  AA_[A == action_set[2]] <- 1
+  AA_ <- as.numeric(AA_)
   tt <- terms(formula, data = H)
 
   if (length(attr(tt, "term.labels")) == 0)
-    formula <- AA ~ 1
+    formula <- AA_ ~ 1
   else
-    formula <- reformulate(attr(tt, "term.labels"), response = "AA")
+    formula <- reformulate(attr(tt, "term.labels"), response = "AA_")
 
-  environment(formula)$AA <- AA
+  if ("AA_" %in% colnames(H)) {
+    stop("Variable name 'AA_' is not allowed in the history H. ",
+         "Please rename this column.")
+  }
+
+  environment(formula)$AA_ <- AA_
   attr(formula, "action_set") <- action_set
-  attr(formula, "response") <- "AA"
+  attr(formula, "response") <- "AA_"
 
   return(formula)
 }
@@ -46,89 +83,6 @@ check_missing_regressor <- function(formula, data){
     mes <- paste("The regression variables ", mes, " have missing (NA) values.", sep = "")
     warning(mes)
   }
-}
-
-get_response <- function(formula, ...) {
-  if (!is.null(attr(formula, "response"))) {
-    y <- get(attr(formula, "response"), envir=environment(formula))
-  } else {
-    y <- model.response(model.frame(formula, ...))
-  }
-  return(y)
-}
-
-get_design <- function(formula, data) {
-  tt <- terms(formula, data=data)
-  attr(tt, "intercept") <- 1
-  tt <- delete.response(tt)
-  op <- options(na.action = "na.pass")
-
-  mf <- tryCatch(model.frame(tt, data=data, drop.unused.levels = TRUE),
-                    error = function(e) e
-  )
-  if (inherits(mf, "error")) {
-    mf$message <-
-      paste0(mf$message, " when calling model.frame with formula:\n",
-             format(formula))
-    stop(mf)
-  }
-
-  xlevels <- .getXlevels(tt, mf)
-  x <- model.matrix(mf, data=data)
-  options(op)
-  idx_inter <- which(colnames(x) == "(Intercept)")
-  if (length(idx_inter)>0)
-    x <- x[,-idx_inter, drop = FALSE]
-  colnames(x) <- gsub("[^[:alnum:]]", "_", colnames(x))
-  return(list(terms=tt, xlevels=xlevels, x=x))
-}
-
-apply_design <- function(design, data){
-  terms <- getElement(design, "terms")
-  xlevels <- getElement(design, "xlevels")
-
-  op <- options(na.action = "na.pass")
-  mf <- model.frame(terms,
-                    data=data,
-                    xlev = xlevels,
-                    drop.unused.levels=FALSE)
-  newx <- model.matrix(mf, data=data, xlev = xlevels)
-  options(op)
-
-  idx_inter <- which(colnames(newx) == "(Intercept)")
-  if (length(idx_inter)>0)
-    newx <- newx[,-idx_inter, drop = FALSE]
-
-  colnames(newx) <- gsub("[^[:alnum:]]", "_", colnames(newx))
-  return(newx)
-}
-
-supp_warnings <- function(expr, mess, fun) {
-  if(!is.character(mess))
-    stop()
-  if(!is.character(fun))
-    stop()
-  if(length(mess) != length(fun))
-    stop()
-
-  eval.parent(
-    substitute(
-      withCallingHandlers(expr, warning = function (w) {
-        mess_ <- mess
-        fun_ <- fun
-        cm   <- conditionMessage(w)
-        cc <- conditionCall(w)
-        cond_cc <- FALSE
-        if (is.call(cc) & length(as.character(cc))>0){
-          cc <- as.character(cc)[[1]]
-          cond_cc <- (cc == fun_)
-        }
-        cond_cm <- (cm == mess_)
-        if (any(cond_cm & cond_cc))
-          tryInvokeRestart("muffleWarning")
-      })
-    )
-  )
 }
 
 new_g_model <- function(g_model){
@@ -261,7 +215,7 @@ g_empir <- function(formula = ~1, ...) {
   environment(formula) <- NULL
 
   g_empir <- function(A, H, action_set){
-    check_g_formula(formula = formula, data = H)
+    check_formula(formula = formula, data = H, call = "g_empir")
     data <- cbind(A, H)
     tmp <- calculate_prop_table(data, formula = formula)
     tab <- tmp[["tab"]]
@@ -318,8 +272,8 @@ g_glm <- function(formula = ~.,
   dotdotdot <- list(...)
 
   g_glm <- function(A, H, action_set){
+    check_formula(formula = formula, data = H, call = "g_glm")
     formula <- update_g_formula(formula, A, H)
-
     args_glm <- append(list(formula = formula,
                             data = H,
                             family = family,
@@ -328,9 +282,9 @@ g_glm <- function(formula = ~.,
                        dotdotdot)
 
     model <- tryCatch(do.call(what = "glm", args = args_glm),
-                      error = function(e) e
-    )
+                      error = function(e) e)
     if (inherits(model, "error")) {
+      formula <- delete.response(terms(formula))
       model$message <-
         paste0(model$message, " when calling 'g_glm' with formula:\n",
                format(formula))
@@ -344,7 +298,7 @@ g_glm <- function(formula = ~.,
     return(m)
   }
 
-  # setting class:
+  ## setting class:
   g_glm <- new_g_model(g_glm)
 
   return(g_glm)
@@ -370,6 +324,7 @@ g_glmnet <- function(formula = ~.,
   formula <- as.formula(formula)
   dotdotdot <- list(...)
   g_glmnet <- function(A, H, action_set){
+    check_formula(formula = formula, data = H, call = "g_glmnet")
     formula <- update_g_formula(formula, A, H)
     y <- get_response(formula, data=H)
     des <- get_design(formula, data=H)
@@ -383,6 +338,7 @@ g_glmnet <- function(formula = ~.,
                       error = function(e) e
     )
     if (inherits(model, "error")) {
+      formula <- delete.response(terms(formula))
       model$message <-
         paste0(model$message, " when calling 'g_glmnet' with formula:\n",
                format(formula))
@@ -450,6 +406,7 @@ g_rf <- function(formula = ~.,
 
   g_rf <- function(A, H, action_set) {
     A <- factor(A, levels = action_set)
+    check_formula(formula = formula, data = H, call = "g_rf")
     des <- get_design(formula, data=H)
     data <- data.frame(A, des$x)
     res <- NULL; best <- 1
@@ -499,7 +456,7 @@ predict.g_rf <- function(object, new_H, ...){
 g_sl <- function(formula = ~ .,
                  SL.library=c("SL.mean", "SL.glm"),
                  family=binomial(),
-                 env = as.environment("package:SuperLearner"),
+                 env = parent.frame(),
                  onlySL = TRUE,
                  ...) {
   if (!requireNamespace("SuperLearner"))
@@ -510,6 +467,7 @@ g_sl <- function(formula = ~ .,
   dotdotdot <- list(...)
   g_sl <- function(A, H, action_set) {
     A <- as.numeric(factor(A, levels=action_set))-1
+    check_formula(formula = formula, data = H, call = "g_sl")
     des <- get_design(formula, data=H)
     sl_args <- append(list(Y=A,
                            X=as.data.frame(des$x),
@@ -621,19 +579,19 @@ g_xgboost <- function(formula = ~.,
   ml <- function(formula = A~., objective,
                  params, nrounds, max_depth,
                  eta, nthread){
-    targeted::ml_model$new(formula,
-                           info = "xgBoost",
-                           estimate = function(x, y) {
-                             xgboost::xgboost(
-                               data = x, label = y,
-                               objective = objective,
-                               params = params,
-                               nrounds = nrounds,
-                               max_depth = max_depth,
-                               eta = eta,
-                               nthread = nthread,
-                               verbose = 0, print_every = 0)
-                           })
+    targeted::learner$new(formula,
+                          info = "xgBoost",
+                          estimate = function(x, y) {
+                            xgboost::xgboost(
+                                       data = x, label = y,
+                                       objective = objective,
+                                       params = params,
+                                       nrounds = nrounds,
+                                       max_depth = max_depth,
+                                       eta = eta,
+                                       nthread = nthread,
+                                       verbose = 0, print_every = 0)
+                          })
   }
 
   ml_args <- expand.list(
@@ -661,16 +619,18 @@ g_xgboost <- function(formula = ~.,
     # formatting data:
     A <- factor(A, levels = action_set)
     A <- as.numeric(A) - 1
+    check_formula(formula = formula, data = H, call = "g_xgboost")
     des <- get_design(formula, data=H)
     data <- data.frame(A, des$x)
 
     # cross-validating models
     cv_res <- NULL
     if (length(ml_models)>1){
-      cv_res <- tryCatch(targeted::cv(ml_models, data, K = cv_args$nfolds, rep = cv_args$rep),
+      cv_res <- tryCatch(targeted::cv(ml_models, data, nfolds = cv_args$nfolds, rep = cv_args$rep),
         error = function(e) e
         )
       if (inherits(cv_res, "error")) {
+        formula <- delete.response(terms(formula))
         cv_res$message <-
           paste0(cv_res$message, " when calling 'g_xgboost' with formula:\n",
                  format(formula))
