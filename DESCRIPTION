@@ -1,6 +1,6 @@
 Package: polle
 Title: Policy Learning
-Version: 1.6.0
+Version: 1.6.1
 Authors@R: c(person(given = "Andreas",
                     family = "Nordland",
                     role = c("aut", "cre"),
@@ -24,9 +24,9 @@ RoxygenNote: 7.3.3
 BugReports: https://github.com/AndreasNordland/polle/issues
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2025-10-30 12:20:58 UTC; oano
+Packaged: 2025-12-01 14:56:35 UTC; oano
 Author: Andreas Nordland [aut, cre],
   Klaus Holst [aut] (ORCID: <https://orcid.org/0000-0002-1364-6789>)
 Maintainer: Andreas Nordland <andreasnordland@gmail.com>
 Repository: CRAN
-Date/Publication: 2025-10-30 13:00:02 UTC
+Date/Publication: 2025-12-01 15:40:08 UTC
