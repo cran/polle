@@ -1,4 +1,4 @@
-bb8088c68c15315deb35050073668306 *DESCRIPTION
+9476a222e70989f1bae9bd6c71132221 *DESCRIPTION
 33189c79299467402857875470f3eb3a *NAMESPACE
 cdbc669576dfcfadb88545338b28a1d2 *NEWS.md
 4a7ca3f66993feb115ff86a0f2070ef5 *R/Q_function.R
@@ -10,7 +10,7 @@ a1eac7a3516c9bc0f7086bbbe59a33ca *R/drql.R
 a74e2c607f0ec2ba3073b731910601d3 *R/estimate_target.R
 e057272fec285a3c4ff5c87618c39081 *R/fit_functions.R
 2357b52e22d6b28a88dbaf3f38154b93 *R/g_function.R
-df00d469ecc7b6e6bd26de9747a7af7c *R/g_models.R
+52c360385f1bf88ad4c1700ced9113f0 *R/g_models.R
 8e1d873fd97c01038109c0cbcec62c81 *R/helper_functions.R
 8ff6e085866b9292bae171a7b54185ae *R/history_functions.R
 f6aec703afebf1a630ce1314e3ed70fa *R/m_function.R
@@ -27,7 +27,7 @@ f38cff774804cbd7952d52244c8faf7a *R/policy_learn.R
 e41689213a16ad87aee5d4d629e15277 *R/policy_object_functions.R
 e9d430aa9799cacf7711c127f0680687 *R/polle-package.R
 ee9a353d2d279983a45f019923096a0e *R/ptl.R
-8a152204e761d6670e8cd30f0860d636 *R/q_models.R
+5a465163cb602b08f38bccf0f68ffe6c *R/q_models.R
 661aacdb60f7018e021fda24ff49b9bd *R/rql.R
 1ae1ab6f4c443421222182a72782878f *R/rwl.R
 e572d483894b1ebb3377fa55ef399991 *R/scoring.R
@@ -42,13 +42,13 @@ ea0365e9e274dbf4adbc03186ac5786b *inst/doc/optimal_subgroup.Rmd
 7f808bd46a1ff00e621e5e2761caab6c *inst/doc/optimal_subgroup.html
 378650924e19776143eff95175a92738 *inst/doc/policy_data.R
 dfe63533d3f19fd381f0d7ae82dbe142 *inst/doc/policy_data.Rmd
-9a9b995cc269a20da8a0787a1e8bc4d9 *inst/doc/policy_data.html
+518084352d85c482084fdcfeb139fe62 *inst/doc/policy_data.html
 4e3eaf16b132b4ee4c0d7816b70f2d83 *inst/doc/policy_eval.R
 301f67f5572cd30ddaea2f5ed8867439 *inst/doc/policy_eval.Rmd
-3a456cf6450538359b56593e83917af4 *inst/doc/policy_eval.html
+1addca05ea268a8161992efbc64b69b8 *inst/doc/policy_eval.html
 234f326d0f894b07175d68c41312bb5d *inst/doc/policy_learn.R
 bb965d1896caee4cc6c5faab36db2e83 *inst/doc/policy_learn.Rmd
-73bff620624fa047b10bfc492c3632b2 *inst/doc/policy_learn.html
+b0acebb42d5b96717e5b664cb6fa6301 *inst/doc/policy_learn.html
 e2212c140f619ed78ee84ef826ad7de5 *inst/doc/right_censoring.R
 8b6700dc24db9fb4f0c3000a1a995601 *inst/doc/right_censoring.Rmd
 c02d5e9de0dec1f7d0eff80e77652242 *inst/doc/right_censoring.html
@@ -65,7 +65,7 @@ c67e6515ff3f15d13ab1eaac4133e7c4 *man/figures/logo.png
 735a40f848d8bb12730114986e5c87da *man/figures/online-validation.jpg
 d5c226dd98ab11bb85fa30a3e067f595 *man/fit_c_functions.Rd
 06985ea647f30e0ccaa43048fe7e7efe *man/fit_g_functions.Rd
-57194e33cd9d36b52f6e2cf40ccfc0c7 *man/g_model.Rd
+a699ce565991f3e54e4ce934f2c37e8e *man/g_model.Rd
 8fe5890707f76dadf722f7d7efd0700e *man/get_K.Rd
 e52f5c1c20253f831da33762128ed2e8 *man/get_action_set.Rd
 d3df6bf2ab59bcbb1076e02b1f7dc132 *man/get_actions.Rd
@@ -95,7 +95,7 @@ b74636b7a67ec2d3c34eadb8f4760819 *man/policy_eval_online.Rd
 a3cd303c6d41c9add0f65f2f0f0dd470 *man/policy_learn.Rd
 cb6d23cd9d67cc1a70d26c9fdab97bdd *man/polle-package.Rd
 54210885abb198a5944183ef6c86a7af *man/predict.nuisance_functions.Rd
-ae61d1ce5c0d196c9efbdd003ee169e8 *man/q_model.Rd
+f82c64dab66abe5936e9beb3d589eec0 *man/q_model.Rd
 8552e1669b0b90386b4ba70c4e4aeecd *man/reexports.Rd
 b56f8adedcce383746ac6975e2fc5ecf *man/sim_multi_stage.Rd
 1d25ddd48f0b89275d13a950961e0ea6 *man/sim_single_stage.Rd
@@ -110,7 +110,7 @@ c0f0b7e2e97963ed602e12173a0efc7d *tests/testthat/test-fit_functions.R
 26c62a60e262d98904b3cd6ad81af09f *tests/testthat/test-fit_m_function.R
 b5c0c92e552863948dbf293ce9b70266 *tests/testthat/test-g_empir.R
 dab9ed2cdb3eb228478018774e207cca *tests/testthat/test-g_models.R
-297a4f37366154ceb415c2d096112fd2 *tests/testthat/test-g_xgboost.R
+cc4a43eb1c5e16cb9bf8603714694522 *tests/testthat/test-g_xgboost.R
 feaf23acde644cceecc5e8576323bfae *tests/testthat/test-helper_functions.R
 ece524799ae5d3039ea96810d5001947 *tests/testthat/test-misc.R
 7125f29a45cf0108b8d6a7412a89fee7 *tests/testthat/test-model_designs.R
@@ -134,8 +134,8 @@ b8cd902d0f16444852d3e68465a8625e *tests/testthat/test-policy_learn-rwl.R
 949c1c6f9bcb68ee08e2f8dc0370cc81 *tests/testthat/test-policy_learn.R
 b73d1c3ab1044ab3a1262fa2be03d717 *tests/testthat/test-q_glmnet.R
 faec9bbd8b0dd51dd4586fdd3bc96afd *tests/testthat/test-q_models.R
-011429897a9d35b22fe6dbd673a28c24 *tests/testthat/test-q_sl.R
-44a01648f7c5fbdcc334ad359ee56878 *tests/testthat/test-q_xgboost.R
+59939fa108fbcd109dd9fda3290c9157 *tests/testthat/test-q_sl.R
+fd128e7e7acc308e6167dbeb51ffffcd *tests/testthat/test-q_xgboost.R
 b66f673824b2dd5492c93a76202be905 *tests/testthat/test-supp_warnings.R
 ea0365e9e274dbf4adbc03186ac5786b *vignettes/optimal_subgroup.Rmd
 dfe63533d3f19fd381f0d7ae82dbe142 *vignettes/policy_data.Rmd
