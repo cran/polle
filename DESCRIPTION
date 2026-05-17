@@ -1,6 +1,6 @@
 Package: polle
 Title: Policy Learning
-Version: 1.6.3
+Version: 1.6.4
 Authors@R: c(person(given = "Andreas",
                     family = "Nordland",
                     role = c("aut", "cre"),
@@ -11,7 +11,7 @@ Authors@R: c(person(given = "Andreas",
                     email = "klaus@holst.it",
                     comment = c(ORCID="0000-0002-1364-6789"))
              )
-Description: Package for learning and evaluating (subgroup) policies via doubly robust loss functions. Policy learning methods include doubly robust blip/conditional average treatment effect learning and sequential policy tree learning. Methods for (subgroup) policy evaluation include doubly robust cross-fitting and online estimation/sequential validation. See Nordland and Holst (2022) <doi:10.48550/arXiv.2212.02335> for documentation and references.
+Description: Package for learning and evaluating (subgroup) policies via doubly robust loss functions. Policy learning methods include doubly robust blip/conditional average treatment effect learning and sequential policy tree learning. Methods for (subgroup) policy evaluation include doubly robust cross-fitting and online estimation/sequential validation. See Nordland and Holst (2026) <doi:10.18637/jss.v116.i04> for documentation and references.
 License: Apache License (>= 2)
 Encoding: UTF-8
 Depends: R (>= 4.1), SuperLearner
@@ -24,9 +24,9 @@ RoxygenNote: 7.3.3
 BugReports: https://github.com/AndreasNordland/polle/issues
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2026-05-05 10:04:35 UTC; oano
+Packaged: 2026-05-16 20:45:24 UTC; oano
 Author: Andreas Nordland [aut, cre],
   Klaus Holst [aut] (ORCID: <https://orcid.org/0000-0002-1364-6789>)
 Maintainer: Andreas Nordland <andreasnordland@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-05-05 10:50:08 UTC
+Date/Publication: 2026-05-17 22:50:02 UTC

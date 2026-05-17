@@ -381,7 +381,7 @@ learning algorithm</a></li>
 the associated S3 methods. The purpose of <code>policy_eval</code> is to
 estimate (evaluate) the value of a user-defined policy or a policy
 learning algorithm. For details on the methodology, see the associated
-paper <span class="citation">(Nordland and Holst 2023)</span>.</p>
+paper <span class="citation">(Nordland and Holst 2026)</span>.</p>
 <p>We consider a fixed two-stage problem as a general setup and simulate
 data using <code>sim_two_stage()</code> and create a
 <code>policy_data</code> object using <code>policy_data()</code>:</p>
@@ -417,7 +417,7 @@ evaluations: Inverse probability weighting estimation, outcome
 regression estimation, and doubly robust (DR) estimation. As doubly
 robust estimation is a combination of the two other types, we focus on
 this approach. For details on the implementation see Algorithm 1 in
-<span class="citation">(Nordland and Holst 2023)</span>.</p>
+<span class="citation">(Nordland and Holst 2026)</span>.</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>(pe1 <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(<span class="at">policy_data =</span> pd,</span>
 <span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>                    <span class="at">policy =</span> p1,</span>
 <span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>                    <span class="at">type =</span> <span class="st">&quot;dr&quot;</span>))</span></code></pre></div>
@@ -463,7 +463,6 @@ a ratio:</p>
 <span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>(est <span class="ot">&lt;-</span> <span class="fu">merge</span>(pe0, pe1))</span></code></pre></div>
 <pre><code>##                  Estimate Std.Err    2.5%  97.5%   P-value
 ## E[U(d)]: d=(A=0) -0.06123  0.0881 -0.2339 0.1114 4.871e-01
-## ────────────────                                          
 ## E[U(d)]: d=(A=1)  0.82132  0.1115  0.6027 1.0399 1.796e-13</code></pre>
 <div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="fu">estimate</span>(est, <span class="cf">function</span>(x) x[<span class="dv">2</span>]<span class="sc">-</span>x[<span class="dv">1</span>], <span class="at">labels=</span><span class="st">&quot;ATE-difference&quot;</span>)</span></code></pre></div>
 <pre><code>##                Estimate Std.Err   2.5% 97.5%  P-value
@@ -592,7 +591,7 @@ Q-models.</p>
 <h2>Evaluating a policy learning algorithm</h2>
 <p>The value of a learned policy is an important performance measure,
 and <code>policy_eval()</code> allow for direct evaluation of a given
-policy learning algorithm. For details, see Algorithm 4 in <span class="citation">(Nordland and Holst 2023)</span>.</p>
+policy learning algorithm. For details, see Algorithm 4 in <span class="citation">(Nordland and Holst 2026)</span>.</p>
 <p>In <code>polle</code>, policy learning algorithms are specified using
 <code>policy_learn()</code>, see the associated vignette. These
 functions can be directly evaluated in <code>policy_eval()</code>:</p>
@@ -672,26 +671,26 @@ arguments.</p>
 ## 
 ## other attached packages:
 ## [1] future_1.70.0       ggplot2_4.0.2       data.table_1.18.2.1
-## [4] polle_1.6.3         SuperLearner_2.0-40 gam_1.22-7         
+## [4] polle_1.6.4         SuperLearner_2.0-40 gam_1.22-7         
 ## [7] foreach_1.5.2       nnls_1.6           
 ## 
 ## loaded via a namespace (and not attached):
 ##  [1] sass_0.4.10            generics_0.1.4         lattice_0.22-7        
 ##  [4] listenv_0.10.1         digest_0.6.39          magrittr_2.0.4        
 ##  [7] evaluate_1.0.5         grid_4.5.2             RColorBrewer_1.1-3    
-## [10] iterators_1.0.14       mvtnorm_1.3-6          policytree_1.2.4      
+## [10] iterators_1.0.14       mvtnorm_1.3-7          policytree_1.2.4      
 ## [13] fastmap_1.2.0          jsonlite_2.0.0         Matrix_1.7-4          
 ## [16] survival_3.8-3         scales_1.4.0           numDeriv_2016.8-1.1   
-## [19] codetools_0.2-20       jquerylib_0.1.4        lava_1.9.0            
-## [22] cli_3.6.5              rlang_1.2.0            mets_1.3.9            
-## [25] parallelly_1.46.1      future.apply_1.20.2    RcppArmadillo_15.2.4-1
+## [19] codetools_0.2-20       jquerylib_0.1.4        lava_1.9.1            
+## [22] cli_3.6.6              rlang_1.2.0            mets_1.3.9            
+## [25] parallelly_1.47.0      future.apply_1.20.2    RcppArmadillo_15.2.6-1
 ## [28] withr_3.0.2            cachem_1.1.0           yaml_2.3.12           
 ## [31] otel_0.2.0             tools_4.5.2            parallel_4.5.2        
 ## [34] dplyr_1.2.0            ranger_0.17.0          globals_0.19.1        
 ## [37] vctrs_0.7.2            R6_2.6.1               lifecycle_1.0.5       
 ## [40] pkgconfig_2.0.3        timereg_2.0.7          progressr_0.19.0      
 ## [43] bslib_0.10.0           pillar_1.11.1          gtable_0.3.6          
-## [46] Rcpp_1.1.1             glue_1.8.0             tidyselect_1.2.1      
+## [46] Rcpp_1.1.1-1.1         glue_1.8.0             tidyselect_1.2.1      
 ## [49] xfun_0.57              tibble_3.3.1           knitr_1.51            
 ## [52] farver_2.1.2           htmltools_0.5.9        labeling_0.4.3        
 ## [55] rmarkdown_2.31         compiler_4.5.2         S7_0.2.1</code></pre>
@@ -700,8 +699,9 @@ arguments.</p>
 <h1 class="unnumbered">References</h1>
 <div id="refs" class="references csl-bib-body hanging-indent">
 <div id="ref-nordland2023policy" class="csl-entry">
-Nordland, Andreas, and Klaus K. Holst. 2023. <em>Policy Learning with
-the Polle Package</em>. <a href="https://doi.org/10.48550/arXiv.2212.02335">https://doi.org/10.48550/arXiv.2212.02335</a>.
+Nordland, Andreas, and Klaus Kähler Holst. 2026. <span>“Policy Learning
+with the <span class="nocase">polle</span> Package.”</span> <em>Journal
+of Statistical Software</em> 116 (4): 1–51. <a href="https://doi.org/10.18637/jss.v116.i04">https://doi.org/10.18637/jss.v116.i04</a>.
 </div>
 </div>
 </div>
