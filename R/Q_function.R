@@ -32,9 +32,7 @@ fit_Q_function <- function(history, Q, q_model) {
   V_res <- unlist(Q - U[, "U_bar"] - U_A)
 
   ## removing missing outcomes (censored/coarsened)
-  missing_ <- is.na(Q)
-  V_res <- V_res[missing_ == FALSE]
-  AH <- AH[missing_ == FALSE, ]
+  if (anyNA(V_res)) stop("NA values when fitting Q-function")
 
   ## fitting the (residual) Q-model
   q_model <- q_model(V_res = V_res, AH = AH)
@@ -238,7 +236,7 @@ q_step_cf <- function(folds,
 #' @noRd
 #' @param policy_data Policy data object created by [policy_data()].
 #' @param policy_actions Policy actions, see [policy_def].
-#' @param q_models Outcome regression models/Q-models created by [q_glm()], [q_rf()], [q_sl()] or similar functions.
+#' @param q_models Outcome regression models/Q-models created by [q_glm()], [q_rf()] or similar functions.
 #' @param full_history If TRUE, the full history is used to fit each Q-model. If FALSE, the single stage/"Markov type" history is used to fit each Q-model.
 #' @param m_function Function of class m_function to impute missing outcomes.
 #' @examples
@@ -304,15 +302,13 @@ fit_Q_functions <- function(policy_data,
 
   ## (n X K+1) matrix with entries
   ## k-column = Q_k(H_{k,i}, d_k(H_{k,i})), k = 1,...,K
-  ## K+1-column = U (if no missing final outcomes) or Q_{K+1}(H_{K+1})
-  Q <- matrix(nrow = n, ncol = K + 1)
-  if (is.null(m_function) == TRUE){
-    ## getting the observed (complete) utility:
-    utility <- get_utility(policy_data)
-    ## (n) vector with entries U_i:
-    U <- utility$U
-    Q[, K + 1] <- U
-  } else {
+  ## K+1-column = U (if no missing final outcomes)
+  ## or Q_{K+1}(H_{K+1}) (equals U for early terminal events)
+  Q <- matrix(NA_real_, nrow = n, ncol = K + 1)
+  utility <- get_utility(policy_data) # observed (complete) utility
+  Q[, K + 1] <- utility[["U"]]
+
+  if (!is.null(m_function)){
     Q_K1 <- predict(m_function, new_policy_data = policy_data)
     Q[(id %in% Q_K1[["id"]]), K + 1] <- Q_K1[["Q"]]
   }

@@ -307,9 +307,7 @@ test_that("policy_eval with target 'value' has the expected output for the fixed
 
   ref_pe_ipw <- mean((d$a1 == d$p1) / 0.5 * (d$m == 0) * (d$a2 == d$p2) / 0.5 *  d$y)
 
-  ##
   ## no cross-fitting
-  ##
 
   pe <- policy_eval(
     policy_data = pd,
@@ -335,13 +333,12 @@ test_that("policy_eval with target 'value' has the expected output for the fixed
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
-  ##
   ## cross-fitting
-  ##
 
   pe <- policy_eval(
     policy_data = pd,
@@ -368,8 +365,9 @@ test_that("policy_eval with target 'value' has the expected output for the fixed
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   ## right-censoring NOT occuring at stage K+1:
@@ -469,9 +467,7 @@ test_that("policy_eval with target 'value' has the expected output for the fixed
 
   ref_pe_ipw <- mean((d$a1 == d$p1) / 0.5 * (d$m == 0) * (d$a2 == d$p2) / 0.5 *  d$y)
 
-  ##
   ## no cross-fitting
-  ##
 
   mf <- fit_m_function(policy_data = pd, m_model = q_glm(~x))
   expect_null(mf)
@@ -501,8 +497,9 @@ test_that("policy_eval with target 'value' has the expected output for the fixed
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   ## no m_model input:
@@ -529,8 +526,9 @@ test_that("policy_eval with target 'value' has the expected output for the fixed
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   ## right-censoring ONLY occuring at stage K+1:
@@ -633,9 +631,7 @@ test_that("policy_eval with target 'value' has the expected output for the fixed
 
   ref_pe_ipw <- mean((d$a1 == d$p1) / 0.5 * (d$m == 0) * (d$a2 == d$p2) / 0.5 *  d$y)
 
-  ##
   ## no cross-fitting
-  ##
 
   pe <- policy_eval(
     policy_data = pd,
@@ -661,8 +657,9 @@ test_that("policy_eval with target 'value' has the expected output for the fixed
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
 })
@@ -778,13 +775,23 @@ test_that("policy_eval with target 'subgroup' has the correct output under right
   )
 
   expect_equal(
-    IC(sub),
-    cbind(ref_IC, ref_IC_comp) |> unname()
+    IC(sub) |> unname(),
+    cbind(ref_IC, ref_IC_comp) |> unname(),
+    check.attributes = FALSE
   )
 
   expect_equal(
     names(sub$coef),
-    c("E[U(2)-U(1)|d=2]: d=p", "E[U(2)-U(1)|d=1]: d=p")
+    c(
+      "E[U(2)|d=1]: d=p",
+      "E[U(1)|d=1]: d=p",
+      "E[U(2)|d=0]: d=p",
+      "E[U(1)|d=0]: d=p"
+    )
+  )
+  expect_equal(
+    names(coef(sub)),
+    c("E[U(2)-U(1)|d=1]: d=p", "E[U(2)-U(1)|d=0]: d=p")
   )
 
   ##
@@ -812,8 +819,9 @@ test_that("policy_eval with target 'subgroup' has the correct output under right
   )
 
   expect_equal(
-    IC(sub),
-    cbind(ref_IC, ref_IC_comp) |> unname()
+    IC(sub) |> unname(),
+    cbind(ref_IC, ref_IC_comp) |> unname(),
+    check.attributes = FALSE
   )
 
   ## right-censoring NOT occuring at stage 2:
@@ -896,13 +904,23 @@ test_that("policy_eval with target 'subgroup' has the correct output under right
   )
 
   expect_equal(
-    IC(sub),
-    cbind(ref_IC, ref_IC_comp) |> unname()
+    IC(sub) |> unname(),
+    cbind(ref_IC, ref_IC_comp) |> unname(),
+    check.attributes = FALSE
   )
 
   expect_equal(
     names(sub$coef),
-    c("E[U(2)-U(1)|d=2]: d=p", "E[U(2)-U(1)|d=1]: d=p")
+    c(
+      "E[U(2)|d=1]: d=p",
+      "E[U(1)|d=1]: d=p",
+      "E[U(2)|d=0]: d=p",
+      "E[U(1)|d=0]: d=p"
+    )
+  )
+  expect_equal(
+    names(coef(sub)),
+    c("E[U(2)-U(1)|d=1]: d=p", "E[U(2)-U(1)|d=0]: d=p")
   )
 
   ## no m_model input:
@@ -921,13 +939,23 @@ test_that("policy_eval with target 'subgroup' has the correct output under right
   )
 
   expect_equal(
-    IC(sub),
-    cbind(ref_IC, ref_IC_comp) |> unname()
+    IC(sub) |> unname(),
+    cbind(ref_IC, ref_IC_comp) |> unname(),
+    check.attributes = FALSE
   )
 
   expect_equal(
     names(sub$coef),
-    c("E[U(2)-U(1)|d=2]: d=p", "E[U(2)-U(1)|d=1]: d=p")
+    c(
+      "E[U(2)|d=1]: d=p",
+      "E[U(1)|d=1]: d=p",
+      "E[U(2)|d=0]: d=p",
+      "E[U(1)|d=0]: d=p"
+    )
+  )
+  expect_equal(
+    names(coef(sub)),
+    c("E[U(2)-U(1)|d=1]: d=p", "E[U(2)-U(1)|d=0]: d=p")
   )
 
   ## right-censoring NOT occuring at stage 1:
@@ -1012,13 +1040,23 @@ test_that("policy_eval with target 'subgroup' has the correct output under right
   )
 
   expect_equal(
-    IC(sub),
-    cbind(ref_IC, ref_IC_comp) |> unname()
+    IC(sub) |> unname(),
+    cbind(ref_IC, ref_IC_comp) |> unname(),
+    check.attributes = FALSE
   )
 
   expect_equal(
     names(sub$coef),
-    c("E[U(2)-U(1)|d=2]: d=p", "E[U(2)-U(1)|d=1]: d=p")
+    c(
+      "E[U(2)|d=1]: d=p",
+      "E[U(1)|d=1]: d=p",
+      "E[U(2)|d=0]: d=p",
+      "E[U(1)|d=0]: d=p"
+    )
+  )
+  expect_equal(
+    names(coef(sub)),
+    c("E[U(2)-U(1)|d=1]: d=p", "E[U(2)-U(1)|d=0]: d=p")
   )
 
 })
@@ -1400,8 +1438,9 @@ for the two-stage case under right-censoring and terminal events.", {
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   rm(list = ls())
@@ -1538,8 +1577,9 @@ for the two-stage case under right-censoring and terminal events.", {
   )
 
   expect_equal(
-      IC(pe),
-      matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   rm(list =ls())
@@ -1679,7 +1719,8 @@ for the two-stage case under right-censoring and terminal events.", {
   )
 
   expect_equal(
-      IC(pe),
-      matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 })

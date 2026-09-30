@@ -55,8 +55,8 @@ get_q_functions(pe1)
 pe1 <- policy_eval(pd,
             policy = p1,
             g_models = list(
-              g_sl(formula = ~ BB + L_1, SL.library = c("SL.glm", "SL.ranger")),
-              g_sl(formula = ~ BB + L_1 + C_2, SL.library = c("SL.glm", "SL.ranger"))
+              g_rf(formula = ~ BB + L_1),
+              g_rf(formula = ~ BB + L_1 + C_2)
             ),
             g_full_history = TRUE,
             q_models = list(

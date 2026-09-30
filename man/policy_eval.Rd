@@ -10,8 +10,9 @@
 \alias{summary.policy_eval}
 \alias{estimate.policy_eval}
 \alias{merge.policy_eval}
-\alias{+.policy_eval}
+\alias{coef.policy_eval_online}
 \alias{vcov.policy_eval_online}
+\alias{summary.policy_eval_online}
 \title{Policy Evaluation}
 \usage{
 policy_eval(
@@ -41,40 +42,28 @@ policy_eval(
   M = 1,
   nrep = 1,
   min_subgroup_size = 1,
-  future_args = list(future.seed = TRUE),
-  name = NULL
+  future_args = list(future.seed = TRUE)
 )
 
-\method{coef}{policy_eval}(object, ...)
+\method{coef}{policy_eval}(object, contrast = TRUE, ...)
 
-\method{IC}{policy_eval}(x, ...)
+\method{IC}{policy_eval}(x, contrast = TRUE, ...)
 
-\method{vcov}{policy_eval}(object, ...)
+\method{vcov}{policy_eval}(object, contrast = TRUE, ...)
 
-\method{print}{policy_eval}(
-  x,
-  digits = 4L,
-  width = 35L,
-  std.error = TRUE,
-  level = 0.95,
-  p.value = TRUE,
-  ...
-)
+\method{print}{policy_eval}(x, digits = 4L, width = 35L, std.error = TRUE, p.value = TRUE, ...)
 
-\method{summary}{policy_eval}(object, ...)
+\method{summary}{policy_eval}(object, contrast = TRUE, return_table = FALSE, ...)
 
-\method{estimate}{policy_eval}(
-  x,
-  labels = get_element(x, "name", check_name = FALSE),
-  level = 0.95,
-  ...
-)
+\method{estimate}{policy_eval}(x, ...)
 
 \method{merge}{policy_eval}(x, y, ..., paired = TRUE)
 
-\method{+}{policy_eval}(x, ...)
+\method{coef}{policy_eval_online}(object, ...)
 
 \method{vcov}{policy_eval_online}(object, ...)
+
+\method{summary}{policy_eval_online}(object, labels = NULL, contrast = TRUE, ...)
 }
 \arguments{
 \item{policy_data}{Policy data object created by \code{\link[=policy_data]{policy_data()}}.}
@@ -87,7 +76,7 @@ policy_eval(
 Preferably, use \code{g_models}.}
 
 \item{g_models}{List of action probability models/g-models for each stage
-created by \code{\link[=g_empir]{g_empir()}}, \code{\link[=g_glm]{g_glm()}}, \code{\link[=g_rf]{g_rf()}}, \code{\link[=g_sl]{g_sl()}} or similar functions.
+created by \code{\link[=g_empir]{g_empir()}}, \code{\link[=g_glm]{g_glm()}}, \code{\link[=g_rf]{g_rf()}} or similar functions.
 Only used for evaluation if \code{g_functions} is \code{NULL}.
 If a single model is provided and \code{g_full_history} is \code{FALSE},
 a single g-model is fitted across all stages. If \code{g_full_history} is
@@ -103,7 +92,7 @@ Only valid if the Q-functions are fitted using the same policy.
 Preferably, use \code{q_models}.}
 
 \item{q_models}{Outcome regression models/Q-models created by
-\code{\link[=q_glm]{q_glm()}}, \code{\link[=q_rf]{q_rf()}}, \code{\link[=q_sl]{q_sl()}} or similar functions.
+\code{\link[=q_glm]{q_glm()}}, \code{\link[=q_rf]{q_rf()}} or similar functions.
 Only used for evaluation if \code{q_functions} is \code{NULL}.
 If a single model is provided, the model is reused at every stage.}
 
@@ -156,9 +145,12 @@ Either "stacked", or "pooled", see details. (Only used if \code{M > 1} and targe
 
 \item{future_args}{Arguments passed to \code{\link[future.apply:future_apply]{future.apply::future_apply()}}.}
 
-\item{name}{Character string.}
-
 \item{object, x, y}{Objects of class "policy_eval".}
+
+\item{contrast}{Logical. Only used when \code{target = "subgroup"}. If
+\code{TRUE} (default) the subgroup average treatment effects
+\eqn{E[U(a_2)-U(a_1)|d]} are reported; if \code{FALSE} the underlying
+per-subgroup potential outcome means \eqn{E[U(a)|d]} are reported.}
 
 \item{...}{Additional arguments.}
 
@@ -168,20 +160,28 @@ Either "stacked", or "pooled", see details. (Only used if \code{M > 1} and targe
 
 \item{std.error}{Logical. Should the std.error be printed.}
 
-\item{level}{Numeric. Level of confidence limits.}
-
 \item{p.value}{Logical. Should the p.value for associated confidence level be printed.}
 
-\item{labels}{Name(s) of the estimate(s).}
+\item{return_table}{Logical. Used by \code{summary()}. If \code{TRUE} a
+\link[data.table:data.table]{data.table::data.table} of estimates is
+returned instead of the
+default \link[lava:estimate]{lava::estimate} object. Additional meta
+information is included, e.g., subgroup proportions, policy learner settings
+etc.}
 
 \item{paired}{\code{TRUE} indicates that the estimates are based on
 the same data sample.}
+
+\item{labels}{Name(s) of the estimate(s).}
 }
 \value{
 \code{policy_eval()} returns an object of class "policy_eval".
 The object is a list containing the following elements:
-\item{\code{coef}}{Numeric vector. The estimated target parameter:
-policy value or subgroup average treatment effect.}
+\item{\code{coef}}{Numeric vector. The estimated target parameter: the
+policy value, or (when \code{target = "subgroup"}) the per-subgroup
+potential outcome means \eqn{E[U(a)|d]}. The subgroup average treatment
+effects \eqn{E[U(a_2)-U(a_1)|d]} are obtained as contrasts of these means,
+see \code{summary()}, \code{coef()} and \code{estimate()}.}
 \item{\code{IC}}{Numeric matrix. Estimated influence curve associated with
 \code{coef}.}
 \item{\code{type}}{Character string. The type of evaluation ("dr", "ipw",
@@ -214,6 +214,13 @@ Each column represents a different subgroup threshold.}
 for cross-fitting.}
 \item{\code{cross_fit_type}}{Character string.}
 \item{\code{variance_type}}{Character string.}
+\item{\code{input_meta}}{\link[data.table:data.table]{data.table::data.table} with one row per element
+of \code{coef}, containing the input meta information about
+the target parameter and the policy that produced it (e.g. \code{target},
+\code{action}, \code{subgroup}, and any policy-level meta such as
+\code{threshold}, \code{alpha}, \code{type}, \code{K}).}
+\item{\code{output_meta}}{\link[data.table:data.table]{data.table::data.table} with computed meta
+information (e.g. the realised numeric \code{threshold}).}
 }
 \description{
 \code{policy_eval()} is used to estimate
@@ -338,14 +345,13 @@ pd1 <- policy_data(d1,
 pd1
 
 # defining a static policy (A=1):
-pl1 <- policy_def(1)
+pl1 <- policy_def(1, name = "A=1")
 
 # evaluating the policy:
 pe1 <- policy_eval(policy_data = pd1,
                    policy = pl1,
                    g_models = g_glm(),
-                   q_models = q_glm(),
-                   name = "A=1 (glm)")
+                   q_models = q_glm())
 
 # summarizing the estimated value of the policy:
 # (equivalent to summary(pe1)):
@@ -365,11 +371,10 @@ set.seed(1)
 pe1_rf <- policy_eval(policy_data = pd1,
                       policy = pl1,
                       g_models = g_rf(),
-                      q_models = q_rf(),
-                      name = "A=1 (rf)")
+                      q_models = q_rf())
 
-# merging the two estimates (equivalent to pe1 + pe1_rf):
-(est1 <- merge(pe1, pe1_rf))
+# merging the two estimates:
+(est1 <- estimate(merge(pe1, pe1_rf), labels = c("glm", "rf")))
 coef(est1)
 head(IC(est1))
 
@@ -396,8 +401,7 @@ pe2 <- policy_eval(type = "dr",
                    policy_learn = pl2,
                    q_models = q_glm(),
                    g_models = g_glm(),
-                   M = 2, # number of folds for cross-fitting
-                   name = "drql")
+                   M = 2) # number of folds for cross-fitting
 # summarizing the estimated value of the policy:
 pe2
 
@@ -421,5 +425,5 @@ parameters, The Econometrics Journal, Volume 21, Issue 1, 1 February 2018,
 Pages C1–C68, \doi{10.1111/ectj.12097}.
 }
 \seealso{
-\link[lava:IC.default]{lava::IC}, \link[lava:estimate.default]{lava::estimate.default}.
+\link[lava:IC]{lava::IC}, \link[lava:estimate.default]{lava::estimate.default}.
 }

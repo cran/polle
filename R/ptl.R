@@ -40,6 +40,7 @@ ptl <- function(policy_data,
                 cross_fit_g_models, save_cross_fit_models,
                 future_args,
                 depth, split.step, min.node.size, hybrid, search.depth,
+                name = "ptl",
                 ...) {
   K <- get_K(policy_data)
   n <- get_n(policy_data)
@@ -346,7 +347,7 @@ ptl <- function(policy_data,
 
   # setting outputs:
   if (length(q_functions) > 0) {
-    class(q_functions) <- "nuisance_functions"
+    class(q_functions) <- c("q_functions", "nuisance_functions")
     attr(q_functions, "full_history") <- q_full_history
     names(q_functions) <- paste("stage_", 1:K, sep = "")
   } else {
@@ -370,6 +371,9 @@ ptl <- function(policy_data,
     stage_action_sets = stage_action_sets,
     alpha = alpha,
     threshold = threshold,
+    depth = depth,
+    hybrid = hybrid,
+    name = name,
     K = K,
     folds = folds
   )
@@ -389,6 +393,14 @@ get_policy.ptl <- function(object, threshold = NULL) {
   policy_vars <- get_element(object, "policy_vars")
   g_functions <- get_element(object, "g_functions", check_name = FALSE)
   alpha <- get_element(object, "alpha")
+  depth <- get_element(object, "depth", check_name = FALSE)
+  hybrid <- get_element(object, "hybrid", check_name = FALSE)
+  ## user-supplied policy name (from policy_learn(name = ...)); falls back to
+  ## the learner type "ptl" for fitted objects predating this change.
+  policy_name <- object[["name"]]
+  if (is.null(policy_name)) {
+    policy_name <- "ptl"
+  }
   threshold_selection <- get_element(object, "threshold")
   threshold <- set_threshold(
     threshold = threshold,
@@ -467,9 +479,29 @@ get_policy.ptl <- function(object, threshold = NULL) {
         return(policy_actions)
       }
       ## setting class and attributes:
+      ## input_meta: user-supplied / fold-stable settings. Built as a named
+      ## list to preserve column types when coerced to a data.table.
+      ## ptl thresholds are always user-supplied (no quantile_prob_threshold
+      ## option), so there is no dynamic threshold to store on output_meta.
+      ## `type` records the learner class; `policy` records the user-supplied
+      ## policy name (defaults to `type` when the user did not override).
       th <- threshold_selection[th_idx]
-      name <- paste0("ptl(eta=", round(th, 3), ")")
-      policy <- new_policy(policy, name = name)
+      name <- paste0(policy_name, "(eta=", round(th, 3), ")")
+      input_meta <- list(type = "ptl",
+                         policy = policy_name,
+                         alpha = alpha,
+                         threshold = th)
+      if (!is.null(depth)) {
+        ## depth is per-stage; report the stage 1 depth (matches the tree
+        ## whose threshold indexes `th_idx`):
+        input_meta[["depth"]] <- unname(depth[[1]])
+      }
+      if (!is.null(hybrid)) {
+        input_meta[["hybrid"]] <- isTRUE(hybrid)
+      }
+      policy <- new_policy(policy,
+                           name = name,
+                           input_meta = input_meta)
 
       return(policy)
     }

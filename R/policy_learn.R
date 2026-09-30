@@ -24,13 +24,13 @@
 #' \itemize{
 #'   \item \code{qv_models}:
 #' Single element or list of V-restricted Q-models created
-#' by [q_glm()], [q_rf()], [q_sl()] or similar functions.
+#' by [q_glm()], [q_rf()] or similar functions.
 #' }
 #' [control_blip()]:\cr
 #' \itemize{
 #'   \item \code{blip_models}:
 #' Single element or list of V-restricted blip-models created
-#' by [q_glm()], [q_rf()], [q_sl()] or similar functions.
+#' by [q_glm()], [q_rf()] or similar functions.
 #' }
 #' [control_ptl()]: \cr
 #' \itemize{
@@ -55,6 +55,11 @@
 #' used by the support vector machine. The
 #' options are \code{"linear"}, \code{"rbf"}.
 #'    \item \code{augment}:  If \code{TRUE} the outcomes are augmented.
+#'    \item \code{solver}: Quadratic-programming backend for the weighted
+#' SVM used by [DTRlearn2::owl()] when \code{loss = "hinge"}. The default
+#' \code{"ipop"} is exact and order-invariant; \code{"svm"} is faster but
+#' currently returns a decision function whose orientation depends on the
+#' order of the observations. See [control_owl()].
 #' }
 #' [control_earl()]/[control_rwl()]: \cr
 #' \itemize{
@@ -220,14 +225,9 @@ policy_learn <- function(type = "blip",
     (length(save_cross_fit_models) == 1))) {
     stop("save_cross_fit_models must be TRUE or FALSE")
   }
-  if (!is.null(name)) {
-    name <- as.character(name)
-    if (length(name) != 1) {
-      stop("name must be a character string.")
-    }
-    if (length(threshold) > 1 || any(threshold != 0)) {
-      name <- paste(name, "(eta=", threshold, ")", sep = "")
-    }
+  name <- as.character(name)
+  if (length(name) != 1) {
+    stop("name must be a character string.")
   }
 
   if (!is.list(future_args)) {
@@ -242,7 +242,8 @@ policy_learn <- function(type = "blip",
     cross_fit_c_models = cross_fit_c_models,
     save_cross_fit_models = save_cross_fit_models,
     future_args = future_args,
-    full_history = full_history
+    full_history = full_history,
+    name = name
   )
 
   type <- tolower(type)
@@ -260,9 +261,11 @@ policy_learn <- function(type = "blip",
     }
     call <- "ptl"
   } else if (type %in% c("owl", "bowl")) {
-    if (!requireNamespace("DTRlearn2")) {
+    if (!requireNamespace("DTRlearn2",
+                          versionCheck = list(op = ">=",
+                                              version = "2.1"))) {
       mes <- paste0(
-        "The DTRlearn2 package is required to perform value ",
+        "The 'DTRlearn2' package (>= 2.1) is required to perform value ",
         "searching using outcome-weighted learning."
       )
       stop(mes)

@@ -19,27 +19,172 @@ check_actions <- function(actions, policy_data){
   }
 }
 
-#' @rdname policy_eval
-#' @export
-coef.policy_eval <- function(object, ...) {
-  return(get_element(object, "coef"))
+## internal: construct an lava::estimate object from policy_eval object
+## For target = "subgroup" the object stores the 4 per-subgroup potential outcome
+## means per policy; with contrast = TRUE these are collapsed to the 2 subgroup
+## average treatment effects (the quantities reported by default). For
+## target = "value" the coefficients are returned as stored.
+policy_eval_estimate <- function(object, contrast) {
+  target <- get_element(object, "target")
+  coef <- get_element(object, "coef")
+  IC <- get_element(object, "IC", check_name = FALSE)
+  labels <- get_element(object, "name", check_name = FALSE)
+  id <- get_element(object, "id")
+
+  if (identical(target, "subgroup") && isTRUE(contrast)) {
+    odd <- seq.int(1L, length(coef), by = 2L)
+    coef <- coef[odd] - coef[odd + 1L]
+    if (!is.null(IC)) {
+      IC <- IC[, odd, drop = FALSE] - IC[, odd + 1L, drop = FALSE]
+    }
+    labels <- get_element(object, "contrast_name", check_name = FALSE)
+  }
+
+  if (!is.null(IC)) {
+    est <- lava::estimate(NULL,
+                          coef = coef,
+                          IC = IC,
+                          labels = labels,
+                          id = id)
+
+  } else {
+    est <- lava::estimate(NULL,
+                          coef = coef,
+                          vcov = NA,
+                          labels = labels)
+  }
+
+  return(est)
+}
+
+## internal: build a data.table summarising the estimates. The table is a
+## concatenation of a small fixed-prefix and the object's `input_meta`
+## data.table (attached column-wise). Layout by target and `contrast`:
+##
+## - target = "value" (contrast argument is ignored):
+##     one row per policy, columns:
+##       name     - character; the parameter label (from `object$name`,
+##                  e.g. "E[U(d)]" or "E[U(d)]: d=<policy>").
+##       estimate - numeric; the point estimate.
+##       se       - numeric; the standard error (sqrt of the variance
+##                  diagonal).
+##     followed by the columns of `input_meta` (one row per policy;
+##     typically `target` and any static policy-level meta such as
+##     `type`, `K`, `alpha`, `threshold`, `quantile_prob_threshold`).
+##
+## - target = "subgroup", contrast = FALSE:
+##     4 rows per policy (the per-subgroup potential outcome means
+##     E[U(a)|d]; block order [a2|d=1, a1|d=1, a2|d=0, a1|d=0]),
+##     columns:
+##       name                - character; the parameter label.
+##       estimate            - numeric; the point estimate.
+##       se                  - numeric; the standard error.
+##       subgroup_proportion - numeric; the proportion of observations in
+##                             the subgroup that the row refers to.
+##                             `subgroup_indicator` columns are ordered
+##                             [d==a2, d==a1] per policy, so the per-row
+##                             value is obtained by broadcasting each
+##                             indicator column across its two action
+##                             rows (`rep(sp, each = 2)`).
+##     followed by the columns of `input_meta` (4 rows per policy with
+##     `target`, `action`, `subgroup`, and any static policy-level meta).
+##
+## - target = "subgroup", contrast = TRUE:
+##     2 rows per policy (the subgroup average treatment effects
+##     E[U(a2) - U(a1) | d]; block order [d=1, d=0]), columns:
+##       name                - character; the contrast label from
+##                             `object$contrast_name`.
+##       estimate            - numeric; the point estimate of the
+##                             contrast.
+##       se                  - numeric; the standard error.
+##       subgroup_proportion - numeric; the proportion of observations in
+##                             the subgroup that the row refers to
+##                             (identical to the raw `colMeans` of
+##                             `subgroup_indicator`, whose column order
+##                             already matches [d=1, d=0] per policy).
+##     followed by `input_meta` filtered to rows [1, 3] within each
+##     4-row policy block, so the `action` column disappears in meaning
+##     (retained values are the a2 rows) while `subgroup` and any
+##     policy-level meta remain 1:1 with the contrast rows.
+policy_eval_table <- function(object, contrast = TRUE) {
+  target <- get_element(object, "target")
+  input_meta <- get_element(object, "input_meta")
+  name <- get_element(object, "name")
+
+  if (identical(target, "value")) {
+    est <- policy_eval_estimate(object, contrast = FALSE)
+    tab <- data.table::data.table(
+      name          = name,
+      estimate      = coef(est),
+      se            = sqrt(diag(vcov(est)))
+    )
+    tab <- cbind(tab, input_meta)
+    return(tab)
+  }
+
+  if (!identical(target, "subgroup")) {
+    stop("unknown target: ", target)
+  }
+
+  ## subgroup target: build either the means view (contrast = FALSE) or the
+  ## contrasts view (contrast = TRUE).
+  subgroup_indicator <- object[["subgroup_indicator"]]
+  sp <- colMeans(subgroup_indicator)
+
+  if (isFALSE(contrast)) {
+    est <- policy_eval_estimate(object, contrast = FALSE)
+    tab <- data.table::data.table(
+      name          = name,
+      estimate      = coef(est),
+      se            = sqrt(diag(vcov(est))),
+      subgroup_proportion = rep(sp, each = 2)
+    )
+    tab <- cbind(tab, input_meta)
+    return(tab)
+  }
+
+  ## contrast = TRUE
+  est <- policy_eval_estimate(object, contrast = TRUE)
+  contrast_name <- get_element(object, "contrast_name", check_name = FALSE)
+
+  ## for each 4-row policy block in input_meta, keep rows 1 and 3 (subgroup 1
+  ## and subgroup 0):
+  n_blocks <- nrow(input_meta) %/% 4L
+  keep <- as.vector(vapply(
+    seq_len(n_blocks),
+    function(b) (b - 1L) * 4L + c(1L, 3L),
+    integer(2L)
+  ))
+  input_meta <- input_meta[keep, ]
+
+  tab <- data.table::data.table(
+    name          = contrast_name,
+    estimate      = coef(est),
+    se            = sqrt(diag(vcov(est))),
+    subgroup_proportion = sp
+  )
+  tab <- cbind(tab, input_meta)
+  tab[["action"]] <- NULL
+
+  return(tab)
 }
 
 #' @rdname policy_eval
 #' @export
-IC.policy_eval <- function(x, ...) {
-  res <- cbind(get_element(x, "IC", check_name = FALSE))
-  return(res)
+coef.policy_eval <- function(object, contrast = TRUE, ...) {
+  coef(policy_eval_estimate(object, contrast = contrast))
 }
 
 #' @rdname policy_eval
 #' @export
-vcov.policy_eval <- function(object, ...) {
-  ic <- IC(object)
-  if (is.null(ic))
-    return(NULL)
-  n <- nrow(ic)
-  return(crossprod(ic)/(n*n))
+IC.policy_eval <- function(x, contrast = TRUE, ...) {
+  IC(policy_eval_estimate(x, contrast = contrast))
+}
+
+#' @rdname policy_eval
+#' @export
+vcov.policy_eval <- function(object, contrast = TRUE, ...) {
+  vcov(policy_eval_estimate(object, contrast = contrast))
 }
 
 #' @rdname policy_eval
@@ -48,10 +193,9 @@ print.policy_eval <- function(x,
                               digits = 4L,
                               width = 35L,
                               std.error = TRUE,
-                              level = 0.95,
                               p.value = TRUE,
                               ...) {
-  est <- estimate(x, level = level, ...)
+  est <- estimate(x, ...)
   print(
     est,
     digits = digits,
@@ -62,50 +206,20 @@ print.policy_eval <- function(x,
   )
 }
 
-
 #' @rdname policy_eval
 #' @export
-summary.policy_eval <- function(object, ...) {
-  lava::estimate(object, ...)
+summary.policy_eval <- function(object, contrast = TRUE, return_table = FALSE, ...) {
+  if (isTRUE(return_table)) {
+    tab <- policy_eval_table(object, contrast = contrast)
+    return(tab)
+  }
+  policy_eval_estimate(object, contrast = contrast)
 }
 
 #' @rdname policy_eval
 #' @export
-estimate.policy_eval <- function(x,
-                                 labels = get_element(x,
-                                                      "name",
-                                                      check_name = FALSE),
-                                 level = 0.95,
-                                 ...) {
-  p <- length(coef(x))
-  if (is.null(labels)) {
-    target <- get_element(x, "target")
-    if (p == 1) {
-      labels <- target
-    } else {
-      labels <- paste0(target, seq(p))
-    }
-  }
-  ic <- IC(x)
-  if (is.null(ic)) {
-    est <- lava::estimate(
-                   NULL,
-                   coef = coef(x),
-                   vcov = vcov(x),
-                   labels = labels,
-                   ...
-                 )
-  } else {
-    est <- lava::estimate(
-                   NULL,
-                   coef = coef(x),
-                   IC = ic,
-                   labels = labels,
-                   level = level,
-                   ...
-                 )
-  }
-  return(est)
+estimate.policy_eval <- function(x, ...) {
+  summary(x, contrast = TRUE)
 }
 
 #' @rdname policy_eval
@@ -122,12 +236,6 @@ estimate.policy_eval <- function(x,
     do.call(estimate, c(list(p),est_args)))
   m <- do.call("merge", c(m, list(paired=paired)))
   return(m)
-}
-
-#' @rdname policy_eval
-#' @export
-"+.policy_eval" <- function(x,...) {
-  merge(x, ...)
 }
 
 #' @title Conditional Policy Evaluation
@@ -195,7 +303,7 @@ conditional.policy_eval <- function(object, policy_data, baseline) {
 
   by <- baseline_data[, baseline, with = FALSE]
   agg <- aggregate(z, by = by, mean)
-  coef <- agg[["V1"]]
+  coef <- agg[, 2]
 
   n <- get_n(policy_data)
   groups <- agg[[baseline]]

@@ -5,7 +5,6 @@
 \alias{reexports}
 \alias{IC}
 \alias{estimate}
-\alias{All}
 \title{Objects exported from other packages}
 \keyword{internal}
 \description{
@@ -13,8 +12,6 @@ These objects are imported from other packages. Follow the links
 below to see their documentation.
 
 \describe{
-  \item{lava}{\code{\link[lava:estimate.default]{estimate}}, \code{\link[lava:IC.default]{IC}}}
-
-  \item{SuperLearner}{\code{\link[SuperLearner:write.screen.template]{All}}}
+  \item{lava}{\code{\link[lava:estimate]{estimate()}}, \code{\link[lava:IC]{IC()}}}
 }}
 

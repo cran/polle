@@ -13,7 +13,7 @@
 #' @param g_functions Fitted g-model objects, see [nuisance_functions].
 #' Preferably, use \code{g_models}.
 #' @param g_models List of action probability models/g-models for each stage
-#' created by [g_empir()], [g_glm()], [g_rf()], [g_sl()] or similar functions.
+#' created by [g_empir()], [g_glm()], [g_rf()] or similar functions.
 #' Only used for evaluation if \code{g_functions} is \code{NULL}.
 #' If a single model is provided and \code{g_full_history} is \code{FALSE},
 #' a single g-model is fitted across all stages. If \code{g_full_history} is
@@ -25,7 +25,7 @@
 #' Only valid if the Q-functions are fitted using the same policy.
 #' Preferably, use \code{q_models}.
 #' @param q_models Outcome regression models/Q-models created by
-#' [q_glm()], [q_rf()], [q_sl()] or similar functions.
+#' [q_glm()], [q_rf()] or similar functions.
 #' Only used for evaluation if \code{q_functions} is \code{NULL}.
 #' If a single model is provided, the model is reused at every stage.
 #' @param q_full_history Similar to g_full_history.
@@ -59,21 +59,32 @@
 #' @param nrep Number of repetitions of cross-fitting (estimates averaged over repeated cross-fittings)
 #' @param min_subgroup_size Minimum number of observations in the evaluated subgroup (Only used if target = "subgroup").
 #' @param future_args Arguments passed to [future.apply::future_apply()].
-#' @param name Character string.
 #' @param object,x,y Objects of class "policy_eval".
 #' @param labels Name(s) of the estimate(s).
+#' @param contrast Logical. Only used when \code{target = "subgroup"}. If
+#' \code{TRUE} (default) the subgroup average treatment effects
+#' \eqn{E[U(a_2)-U(a_1)|d]} are reported; if \code{FALSE} the underlying
+#' per-subgroup potential outcome means \eqn{E[U(a)|d]} are reported.
 #' @param paired \code{TRUE} indicates that the estimates are based on
 #' the same data sample.
 #' @param digits Integer. Number of printed digits.
 #' @param width Integer. Width of printed parameter name.
 #' @param std.error Logical. Should the std.error be printed.
-#' @param level Numeric. Level of confidence limits.
 #' @param p.value Logical. Should the p.value for associated confidence level be printed.
+#' @param return_table Logical. Used by \code{summary()}. If \code{TRUE} a
+#' \link[data.table:data.table]{data.table::data.table} of estimates is
+#' returned instead of the
+#' default \link[lava:estimate]{lava::estimate} object. Additional meta
+#' information is included, e.g., subgroup proportions, policy learner settings
+#' etc.
 #' @param ... Additional arguments.
 #' @return \code{policy_eval()} returns an object of class "policy_eval".
 #' The object is a list containing the following elements:
-#' \item{\code{coef}}{Numeric vector. The estimated target parameter:
-#' policy value or subgroup average treatment effect.}
+#' \item{\code{coef}}{Numeric vector. The estimated target parameter: the
+#' policy value, or (when \code{target = "subgroup"}) the per-subgroup
+#' potential outcome means \eqn{E[U(a)|d]}. The subgroup average treatment
+#' effects \eqn{E[U(a_2)-U(a_1)|d]} are obtained as contrasts of these means,
+#' see \code{summary()}, \code{coef()} and \code{estimate()}.}
 #' \item{\code{IC}}{Numeric matrix. Estimated influence curve associated with
 #' \code{coef}.}
 #' \item{\code{type}}{Character string. The type of evaluation ("dr", "ipw",
@@ -106,6 +117,13 @@
 #' for cross-fitting.}
 #' \item{\code{cross_fit_type}}{Character string.}
 #' \item{\code{variance_type}}{Character string.}
+#' \item{\code{input_meta}}{[data.table::data.table] with one row per element
+#' of \code{coef}, containing the input meta information about
+#' the target parameter and the policy that produced it (e.g. \code{target},
+#' \code{action}, \code{subgroup}, and any policy-level meta such as
+#' \code{threshold}, \code{alpha}, \code{type}, \code{K}).}
+#' \item{\code{output_meta}}{[data.table::data.table] with computed meta
+#' information (e.g. the realised numeric \code{threshold}).}
 #' @section S3 generics:
 #' The following S3 generic functions are available for an object of
 #' class \code{policy_eval}:
@@ -233,14 +251,13 @@
 #' pd1
 #'
 #' # defining a static policy (A=1):
-#' pl1 <- policy_def(1)
+#' pl1 <- policy_def(1, name = "A=1")
 #'
 #' # evaluating the policy:
 #' pe1 <- policy_eval(policy_data = pd1,
 #'                    policy = pl1,
 #'                    g_models = g_glm(),
-#'                    q_models = q_glm(),
-#'                    name = "A=1 (glm)")
+#'                    q_models = q_glm())
 #'
 #' # summarizing the estimated value of the policy:
 #' # (equivalent to summary(pe1)):
@@ -260,11 +277,10 @@
 #' pe1_rf <- policy_eval(policy_data = pd1,
 #'                       policy = pl1,
 #'                       g_models = g_rf(),
-#'                       q_models = q_rf(),
-#'                       name = "A=1 (rf)")
+#'                       q_models = q_rf())
 #'
-#' # merging the two estimates (equivalent to pe1 + pe1_rf):
-#' (est1 <- merge(pe1, pe1_rf))
+#' # merging the two estimates:
+#' (est1 <- estimate(merge(pe1, pe1_rf), labels = c("glm", "rf")))
 #' coef(est1)
 #' head(IC(est1))
 #'
@@ -291,8 +307,7 @@
 #'                    policy_learn = pl2,
 #'                    q_models = q_glm(),
 #'                    g_models = g_glm(),
-#'                    M = 2, # number of folds for cross-fitting
-#'                    name = "drql")
+#'                    M = 2) # number of folds for cross-fitting
 #' # summarizing the estimated value of the policy:
 #' pe2
 #'
@@ -315,8 +330,7 @@ policy_eval <- function(policy_data,
                         M = 1,
                         nrep = 1,
                         min_subgroup_size = 1,
-                        future_args = list(future.seed=TRUE),
-                        name = NULL
+                        future_args = list(future.seed=TRUE)
                         ) {
   ## argument input checks:
   args <- as.list(environment())
@@ -436,7 +450,6 @@ policy_eval_input_checks <- function(policy_data,
                                      nrep,
                                      min_subgroup_size,
                                      future_args = list(),
-                                     name,
                                      train_block_size = 1){
   args <- as.list(environment())
   if (!inherits(policy_data, what = "policy_data"))
@@ -466,7 +479,6 @@ policy_eval_input_checks <- function(policy_data,
       stop("policy_learn must be of inherited class 'policy_learn'.")
     }
   }
-
   if (!(is.numeric(M) && (length(M) == 1))) {
     stop("M must be an integer greater than 0.")
   }
@@ -505,19 +517,6 @@ policy_eval_input_checks <- function(policy_data,
   } else {
     stop("target must be either 'value' or 'subgroup'.")
   }
-  if (!is.null(name)) {
-    name <- as.character(name)
-    if (target == "value") {
-      if (length(name) != 1) {
-        stop("name must be a character string.")
-      }
-    }
-    if (target == "subgroup") {
-      if (length(name) != 2) {
-        stop("name must be a character vector of length 2 when target = 'subgroup'.")
-      }
-    }
-  }
   type <- tolower(type)
   if (length(type) != 1) {
     stop("type must be a character string.")
@@ -530,21 +529,6 @@ policy_eval_input_checks <- function(policy_data,
     type <- "or"
   } else {
     stop("type must be either 'dr', 'ipw' or  'or'.")
-  }
-
-  ## editing name:
-  if (is.null(name)) {
-    if (target == "value") {
-      name <- "E[U(d)]"
-    }
-
-    if (target == "subgroup") {
-      as <- get_action_set(policy_data)
-      name1 <- paste0("E[U(", as[2], ")-U(", as[1], ")|d=", as[2], "]")
-      name2 <- paste0("E[U(", as[2], ")-U(", as[1], ")|d=", as[1], "]")
-      name <- c(name1, name2)
-      rm(as, name1, name2)
-    }
   }
 
   ## train_block_size used for online/sequential validation:
@@ -561,7 +545,6 @@ policy_eval_input_checks <- function(policy_data,
   ## editing args
   args[["target"]] <- target
   args[["type"]] <- type
-  args[["name"]] <- name
 
   return(args)
 }
@@ -573,6 +556,9 @@ policy_eval_object <- function(
     target,
     id,
     name,
+    input_meta,
+    output_meta = NULL,
+    contrast_name = NULL,
     coef_ipw = NULL,
     coef_or = NULL,
     policy_actions = NULL,
@@ -613,8 +599,7 @@ policy_eval_type <- function(target,
                              c_full_history, save_c_functions,
                              m_model, m_function,
                              m_full_history, save_m_function,
-                             min_subgroup_size,
-                             name) {
+                             min_subgroup_size) {
   ##
   ## training
   ##
@@ -647,16 +632,6 @@ policy_eval_type <- function(target,
   }
   if (inherits(policy, what = "policy")) {
     policy <- list(policy)
-  }
-  ## appending policy names:
-  pol_names <- lapply(policy, function(x) attr(x, which = "name", exact = TRUE))
-  pol_names <- unlist(pol_names)
-  if (!is.null(pol_names)){
-    name <- lapply(pol_names,
-                   function(pn){
-                     paste0(name, ": d=", pn)
-                   })
-    name <- unlist(name)
   }
 
   ##
@@ -725,69 +700,54 @@ policy_eval_type <- function(target,
   ## getting the utility:
   utility <- get_utility(valid_policy_data)
 
-  ## calculating the target estimate for each policy:
+  ## getting the policy actions (for a single policy):
+  policy_actions <- NULL
   if (length(policy) == 1) {
-    ## getting the policy actions for both right-censoring and action events:
+    ## actions for both right-censoring and action events:
     policy_actions <- policy[[1]](valid_policy_data)
-
-    ## checking that the policy actions comply with the stage action sets:
-    check_actions(
-      actions = policy_actions,
-      policy_data = valid_policy_data
-    )
-
-    estimate_objects <- estimate_target(
-      target = target,
-      type = type,
-      K = K,
-      id = id,
-      action_set = action_set,
-      actions = actions,
-      policy_actions = policy_actions,
-      events = events,
-      g_values = g_values,
-      q_values = q_values,
-      c_values = c_values,
-      m_values = m_values,
-      utility = utility,
-      min_subgroup_size = min_subgroup_size
-    )
-    estimate_objects <- list(estimate_objects)
-  } else {
-    policy_actions <- NULL
-
-    estimate_objects <- lapply(
-      policy,
-      function(p) {
-        ## getting the policy actions:## getting the policy actions for both right-censoring and action events:
-        policy_actions <- p(valid_policy_data)
-
-        ## checking that the policy actions comply with the stage action sets:
-        check_actions(
-          actions = policy_actions,
-          policy_data = valid_policy_data
-        )
-
-        out <- estimate_target(
-          target = target,
-          type = type,
-          K = K,
-          id = id,
-          action_set = action_set,
-          actions = actions,
-          policy_actions = policy_actions,
-          events = events,
-          g_values = g_values,
-          q_values = q_values,
-          c_values = c_values,
-          m_values = m_values,
-          utility = utility,
-          min_subgroup_size = min_subgroup_size
-        )
-        return(out)
-      }
-    )
   }
+
+  ## calculating the target estimate for each policy:
+  estimate_objects <- lapply(
+    policy,
+    function(p) {
+      ## getting the policy actions for both right-censoring and action events:
+      pa <- p(valid_policy_data)
+
+      ## checking that the policy actions comply with the stage action sets:
+      check_actions(
+        actions = pa,
+        policy_data = valid_policy_data
+      )
+
+      ## getting policy name and meta information
+      pn <- attr(p, which = "name", exact = TRUE)
+      p_in <- attr(p, which = "input_meta", exact = TRUE)
+      p_out <- attr(p, which = "output_meta", exact = TRUE)
+
+      out <- estimate_target(
+        target = target,
+        type = type,
+        K = K,
+        id = id,
+        action_set = action_set,
+        actions = actions,
+        policy_actions = pa,
+        policy_name = pn,
+        policy_input_meta = p_in,
+        policy_output_meta = p_out,
+        events = events,
+        g_values = g_values,
+        q_values = q_values,
+        c_values = c_values,
+        m_values = m_values,
+        utility = utility,
+        min_subgroup_size = min_subgroup_size
+      )
+      return(out)
+    }
+  )
+
 
   subgroup_indicator <- NULL
   Z <- NULL
@@ -817,13 +777,19 @@ policy_eval_type <- function(target,
   IC <- lapply(estimate_objects, function(eb) get_element(eb, "IC"))
   IC <- do.call(what = "cbind", IC)
 
-  ## if (target == "subgroup" & length(coef) > 1) {
-  ##   ## Reorder coefficients so all thresholds for d=1 are presented first
-  ##   ## followied by d=0
-  ##   idx <- seq_len(length(coef) / 2) * 2 - 1
-  ##   coef <- coef[c(idx, idx + 1)]
-  ##   IC <- IC[, c(idx, idx + 1)]
-  ## }
+  ## collecting names and meta information
+  name <- unlist(lapply(estimate_objects, function(eb) get_element(eb, "name")))
+  contrast_name <- unlist(lapply(estimate_objects, function(eb) get_element(eb, "contrast_name", check_name = FALSE)))
+  input_meta <- data.table::rbindlist(lapply(estimate_objects, function(eb) get_element(eb, "input_meta")))
+  output_meta_list <- lapply(
+    estimate_objects,
+    function(eb) get_element(eb, "output_meta", check_name = FALSE)
+  )
+  if (any(!vapply(output_meta_list, is.null, logical(1)))) {
+    output_meta <- data.table::rbindlist(output_meta_list, fill = TRUE)
+  } else {
+    output_meta <- NULL
+  }
 
   out <- policy_eval_object(
     coef = coef,
@@ -846,7 +812,10 @@ policy_eval_type <- function(target,
     Z = Z,
     subgroup_indicator = subgroup_indicator,
     min_subgroup_size = min_subgroup_size,
-    name = name
+    name = name,
+    contrast_name = contrast_name,
+    input_meta = input_meta,
+    output_meta = output_meta
   )
 
   return(out)
@@ -911,9 +880,14 @@ policy_eval_cross <- function(args,
   cross_fits <- do.call(what = future.apply::future_lapply, cross_args)
 
 
-  ## collecting the paramenter name(s):
+  ## collecting the paramenter name(s) and meta information:
+  ## input_meta is static (fold-stable), so taking it from the first fold is
+  ## safe. output_meta may vary across folds; not collected under CV (out of
+  ## scope in this change).
   name <- get_element(cross_fits[[1]], "name")
-  
+  contrast_name <- get_element(cross_fits[[1]], "contrast_name", check_name = FALSE)
+  input_meta <- get_element(cross_fits[[1]], "input_meta", check_name = FALSE)
+
   ## collecting the ids from each fold (unsorted):
   id <- unlist(lapply(
     cross_fits,
@@ -1008,12 +982,12 @@ policy_eval_cross <- function(args,
       )
     }
     if (cross_fit_type == "pooled") {
-      ## calculating the subgroup average treatment effect estimate:
-      coef <- apply(subgroup_indicator,
-                    MARGIN = 2,
-                    function(x) mean((Z[, 2] - Z[, 1])[x])
-                    )
-      coef[!(subgroup_size >= min_subgroup_size)] <- as.numeric(NA)
+      ## per-subgroup potential outcome means (pooled doubly robust scores):
+      coef <- subgroup_means(
+        Z = Z,
+        subgroup_indicator = subgroup_indicator,
+        min_subgroup_size = min_subgroup_size
+      )[["coef"]]
 
     }
     n_coef <- length(coef)
@@ -1050,30 +1024,23 @@ policy_eval_cross <- function(args,
   if (target == "subgroup") {
     if (variance_type == "stacked") {
       IC <- lapply(
-        cross_fits, function(x) IC(x)
+        cross_fits, function(x) get_element(x, "IC")
       )
       IC <- do.call(what = "rbind", IC)
       IC <- IC[order(id), , drop = FALSE]
     }
     if (variance_type == "pooled") {
-      tmp <- apply(subgroup_indicator,
-                   MARGIN = 2,
-                   function(x) mean((Z[, 2] - Z[, 1])[x])
-                   )
-      IC <- matrix(nrow = n, ncol = n_coef)
-      for (j in 1:n_coef) {
-        ic <- 1 / mean(subgroup_indicator[, j]) *
-          subgroup_indicator[, j] * ((Z[, 2] - Z[, 1]) - tmp[j])
-        IC[, j] <- ic
-      }
-      IC[ ,!(subgroup_size >= min_subgroup_size)] <- NA
-      rm(ic, tmp)
+      IC <- subgroup_means(
+        Z = Z,
+        subgroup_indicator = subgroup_indicator,
+        min_subgroup_size = min_subgroup_size
+      )[["IC"]]
     }
     if (variance_type == "complete") {
       args[["train_policy_data"]] <- policy_data
       args[["valid_policy_data"]] <- policy_data
       pe <- do.call(what = policy_eval_type, args = args)
-      IC <- IC(pe)
+      IC <- get_element(pe, "IC")
       rm(pe)
     }
   }
@@ -1179,6 +1146,8 @@ policy_eval_cross <- function(args,
     cross_fits = cross_fits,
     folds = folds,
     name = name,
+    contrast_name = contrast_name,
+    input_meta = input_meta,
     variance_type = variance_type,
     cross_fit_type = cross_fit_type,
     subgroup_indicator = subgroup_indicator
@@ -1237,8 +1206,13 @@ policy_eval_rep <- function(nrep,
       variance_type = variance_type,
       future_args = future_args
     )
-    name <- get_element(pe, "name")
-    out <- list(coef=coef(pe), IC=IC(pe), name = name)
+    out <- list(
+      coef = get_element(pe, "coef"),
+      IC = get_element(pe, "IC"),
+      name = get_element(pe, "name"),
+      contrast_name = get_element(pe, "contrast_name", check_name = FALSE),
+      input_meta = get_element(pe, "input_meta", check_name = FALSE)
+    )
     return(out)
   }
 
@@ -1255,6 +1229,8 @@ policy_eval_rep <- function(nrep,
   rep_fits <- do.call(what = future.apply::future_lapply, rep_args)
 
   name <- get_element(rep_fits[[1]], "name")
+  contrast_name <- get_element(rep_fits[[1]], "contrast_name", check_name = FALSE)
+  input_meta <- get_element(rep_fits[[1]], "input_meta", check_name = FALSE)
 
   coef <- lapply(rep_fits, function(x) get_element(x, "coef"))
   coef <- do.call(what = "rbind", coef)
@@ -1270,6 +1246,8 @@ policy_eval_rep <- function(nrep,
     target = get_element(args, "target"),
     id = get_id(policy_data),
     name = name,
+    input_meta = input_meta,
+    contrast_name = contrast_name,
     variance_type = variance_type,
     cross_fit_type = cross_fit_type,
     min_subgroup_size = get_element(args, "min_subgroup_size")

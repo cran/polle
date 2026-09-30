@@ -5,6 +5,9 @@ estimate_target <- function(target = "value",
                             action_set,
                             actions,
                             policy_actions,
+                            policy_name,
+                            policy_input_meta,
+                            policy_output_meta = NULL,
                             events,
                             g_values,
                             q_values,
@@ -324,11 +327,46 @@ policy_action_outcome_matrix <- function(q_values, m_values, U, policy_actions, 
   return(Q)
 }
 
+## internal: per-subgroup potential outcome means E[U(a)|d] and their
+## influence curves. For each column of `subgroup_indicator` (d) the
+## two means E[U(a2)|d] and E[U(a1)|d] are computed from the doubly robust
+## scores Z and stored as adjacent coefficients. The
+## subgroup average treatment effect is the contrast of these two means. Returns
+## `coef` (length 2 * ncol(subgroup_indicator)) and `IC` (n x 2 * ncol).
+subgroup_means <- function(Z, subgroup_indicator, min_subgroup_size) {
+  res <- lapply(
+    seq_len(ncol(subgroup_indicator)),
+    function(j) {
+      si <- subgroup_indicator[, j]
+      ps <- mean(si)
+      ## E[U(a2)|subgroup] and E[U(a1)|subgroup]:
+      m2 <- mean(Z[si, 2])
+      m1 <- mean(Z[si, 1])
+      ## influence curves for the two means:
+      ic2 <- 1 / ps * si * (Z[, 2] - m2)
+      ic1 <- 1 / ps * si * (Z[, 1] - m1)
+      if (sum(si) < min_subgroup_size) {
+        m2 <- m1 <- as.numeric(NA)
+        ic2 <- ic1 <- rep(as.numeric(NA), length(si))
+      }
+      list(coef = c(m2, m1), IC = cbind(ic2, ic1))
+    }
+  )
+  coef <- unlist(lapply(res, function(x) x[["coef"]]))
+  IC <- do.call(what = "cbind", lapply(res, function(x) x[["IC"]]))
+  IC <- unname(IC)
+
+  return(list(coef = coef, IC = IC))
+}
+
 dr_subgroup <- function(K,
                         id,
                         action_set,
                         actions,
                         policy_actions,
+                        policy_name,
+                        policy_input_meta,
+                        policy_output_meta = NULL,
                         events,
                         g_values,
                         q_values,
@@ -351,9 +389,7 @@ dr_subgroup <- function(K,
     stop(mes)
   }
 
-  ##
   ## calculating the doubly robust score for each treatment
-  ##
 
   ## (n X K+1) matrix with missing event indicators
   M <- event_matrix(events = events, event_set = c(NA))
@@ -424,43 +460,61 @@ dr_subgroup <- function(K,
     !all(is.na(Z))
   )
 
-  ## calculating the doubly robust blip score:
-  blip <- Z[, 2] - Z[, 1]
-
   ## calculating the subgroup indicator for each treatment:
   subgroup_indicator <- (policy_actions[["d"]] == action_set[2])
   subgroup_indicator <- cbind(subgroup_indicator, !subgroup_indicator)
   subgroup_indicator <- unname(subgroup_indicator)
 
-  res <- apply(
-    subgroup_indicator,
-    MARGIN = 2,
-    FUN = function(si){
-      ## calculating the subgroup average treatment effect:
-      sate <- mean(blip[si])
-      ## calculating the influence curve for the subgroup average treatment effect:
-      IC <- 1 / mean(si) * si *
-        (blip - sate)
-
-      ss <- sum(si)
-      if (ss < min_subgroup_size) {
-        sate <- as.numeric(NA)
-        IC <- rep(as.numeric(NA), length(si))
-      } 
-
-      out <- list(sate = sate, IC = IC)
-    },
-    simplify = FALSE
+  ## calculating the per-subgroup potential outcome means E[U(a)|d] and their
+  ## influence curves.
+  sm <- subgroup_means(
+    Z = Z,
+    subgroup_indicator = subgroup_indicator,
+    min_subgroup_size = min_subgroup_size
   )
-  sate <- lapply(res, function(x) get_element(x, "sate")) |> unlist()
-  IC <- lapply(res, function(x) get_element(x, "IC"))
-  IC <- do.call(what = "cbind", IC)
+
+  ## naming:
+  as <- action_set
+  ## the coefficients are the 4 per-subgroup potential outcome means per
+  ## policy: [E[U(a2)|d=1], E[U(a1)|d=1], E[U(a2)|d=0], E[U(a1)|d=0]]:
+  name <- c(
+    paste0("E[U(", as[2], ")|d=", 1, "]"),
+    paste0("E[U(", as[1], ")|d=", 1, "]"),
+    paste0("E[U(", as[2], ")|d=", 0, "]"),
+    paste0("E[U(", as[1], ")|d=", 0, "]")
+  )
+  ## the two subgroup average treatment effects (reported by default):
+  contrast_name <- c(
+    paste0("E[U(", as[2], ")-U(", as[1], ")|d=", 1, "]"),
+    paste0("E[U(", as[2], ")-U(", as[1], ")|d=", 0, "]")
+  )
+  ## appending policy names:
+  if (!is.null(policy_name)){
+    name <- paste0(name, ": d=", policy_name)
+    contrast_name <- paste0(contrast_name, ": d=", policy_name)
+  }
+
+  ## collecting meta information
+  input_meta <- data.table(
+    action = c(as[2], as[1], as[2], as[1]),
+    subgroup = c(1, 1, 0, 0)
+  )
+  input_meta <- cbind(input_meta,
+                      as.data.table(as.list(policy_input_meta)))
+  output_meta <- NULL
+  if (!is.null(policy_output_meta)) {
+    output_meta <- as.data.table(as.list(policy_output_meta))
+  }
 
   out <- list(
-    coef = sate,
-    IC = IC,
+    coef = sm[["coef"]],
+    IC = sm[["IC"]],
     Z = Z,
-    subgroup_indicator = subgroup_indicator
+    subgroup_indicator = subgroup_indicator,
+    name = name,
+    contrast_name = contrast_name,
+    input_meta = input_meta,
+    output_meta = output_meta
   )
 
   return(out)
@@ -472,6 +526,9 @@ dr_value <- function(K,
                      action_set,
                      actions,
                      policy_actions,
+                     policy_name,
+                     policy_input_meta,
+                     policy_output_meta = NULL,
                      events,
                      g_values,
                      q_values,
@@ -534,10 +591,22 @@ dr_value <- function(K,
   Zd_ipw <- ipw_weight(D[, 1:k], C[, 1:k]) * ipw_weight(II, G = G) * ifelse(is.na(U), 0, U)
   Zd_or <- Q[, 1]
 
-  ##
-  ## output checks
-  ##
+  ## naming:
+  name <- "E[U(d)]"
 
+  ## appending policy names:
+  if (!is.null(policy_name)){
+    name <- paste0(name, ": d=", policy_name)
+  }
+
+  ## collecting meta information
+  input_meta <- as.data.table(as.list(policy_input_meta))
+  output_meta <- NULL
+  if (!is.null(policy_output_meta)) {
+    output_meta <- as.data.table(as.list(policy_output_meta))
+  }
+
+  ## output checks:
   stopifnot(
     all(!is.na(Zd)),
     all(!is.na(Zd_ipw)),
@@ -548,7 +617,10 @@ dr_value <- function(K,
     coef = mean(Zd),
     IC = Zd - mean(Zd),
     coef_ipw = mean(Zd_ipw),
-    coef_or = mean(Zd_or)
+    coef_or = mean(Zd_or),
+    name = name,
+    input_meta = input_meta,
+    output_meta = output_meta
   )
 
   return(out)
@@ -558,12 +630,13 @@ or_value <- function(K,
                      action_set,
                      actions,
                      policy_actions,
+                     policy_name,
+                     policy_input_meta,
+                     policy_output_meta = NULL,
                      q_values,
                      ...) {
 
-  ##
   ## calculating the outcome regression score
-  ##
 
   # (n X K) matrix with entries Q_k(d_k(H_k), H_k)
   q_d_values <- get_a_values(
@@ -579,6 +652,21 @@ or_value <- function(K,
 
   Zd_or <- Q[, 1]
 
+  ## naming:
+  name <- "E[U(d)]"
+
+  ## appending policy names:
+  if (!is.null(policy_name)){
+    name <- paste0(name, ": d=", policy_name)
+  }
+
+  ## collecting meta information
+  input_meta <- as.data.table(as.list(policy_input_meta))
+  output_meta <- NULL
+  if (!is.null(policy_output_meta)) {
+    output_meta <- as.data.table(as.list(policy_output_meta))
+  }
+
   ##
   ## output checks
   ##
@@ -589,7 +677,10 @@ or_value <- function(K,
 
   out <- list(
     coef = mean(Zd_or),
-    IC = NULL
+    IC = NULL,
+    name = name,
+    input_meta = input_meta,
+    output_meta = output_meta
   )
   return(out)
 }
@@ -598,12 +689,13 @@ ipw_value <- function(K,
                       action_set,
                       actions,
                       policy_actions,
+                      policy_name,
+                      policy_input_meta,
+                      policy_output_meta = NULL,
                       g_values,
                       utility,
                       ...) {
-  ##
   ## calculating the inverse probability score
-  ##
 
   # (n) vector with entries U_i:
   U <- utility$U
@@ -634,9 +726,22 @@ ipw_value <- function(K,
 
   Zd_ipw <- ipw_weight(II, G = G) * U
 
-  ##
+  ## naming:
+  name <- "E[U(d)]"
+
+  ## appending policy names:
+  if (!is.null(policy_name)){
+    name <- paste0(name, ": d=", policy_name)
+  }
+
+  ## collecting meta information
+  input_meta <- as.data.table(as.list(policy_input_meta))
+  output_meta <- NULL
+  if (!is.null(policy_output_meta)) {
+    output_meta <- as.data.table(as.list(policy_output_meta))
+  }
+
   ## output checks
-  ##
 
   stopifnot(
     !all(is.na(Zd_ipw))
@@ -644,7 +749,10 @@ ipw_value <- function(K,
 
   out <- list(
     coef = mean(Zd_ipw),
-    IC = Zd_ipw - mean(Zd_ipw)
+    IC = Zd_ipw - mean(Zd_ipw),
+    name = name,
+    input_meta = input_meta,
+    output_meta = output_meta
   )
   return(out)
 }

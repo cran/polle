@@ -46,11 +46,14 @@ test_that("policy_learn with type blip works as intended", {
     all(is.numeric(blip$blip))
   })
 
-  # folds passed to the blip model:
+  # a q-model can be used as the blip model (folds argument accepted but
+  # not currently used by q_glm; a SuperLearner-based q_sl() previously
+  # reused policy_learn's outer folds -- this behaviour is temporarily
+  # unavailable, see NEWS)
   pl <- policy_learn(type = "blip",
                      L = 2,
                      control = control_blip(
-                       blip_models = q_sl()
+                       blip_models = q_glm(~ .)
                      ))
   expect_true({
     po <- pl(
@@ -58,11 +61,7 @@ test_that("policy_learn with type blip works as intended", {
       g_models = g_glm(),
       q_models = q_glm()
     )
-    t1 <- inherits(po, "policy_object")
-    t2 <- po$blip_functions$stage_1$blip_model$model$cvControl$V == 2
-    t3 <- all.equal(po$folds, po$blip_functions$stage_1$blip_model$model$cvControl$validRows)
-
-    all(c(t1, t2, t3))
+    inherits(po, "policy_object")
   })
 
 })
@@ -527,8 +526,8 @@ test_that("policy_learn with type blip uses the quantile_threshold argument.", {
   )
 
   expect_equal(
-    estimate(pe),
-    estimate(pe_ref)
+    coef(pe) |> unname(),
+    coef(pe_ref) |> unname()
   )
 
   pl <- policy_learn(
@@ -827,7 +826,8 @@ test_that("policy_learn with type 'blip' has the correct outputs for the stochas
 
   expect_equal(
     IC(pe),
-    matrix(ref_IC)
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   expect_equal(
@@ -840,9 +840,7 @@ test_that("policy_learn with type 'blip' has the correct outputs for the stochas
     ref_pe_ipw
   )
 
-  ##
   ## cross-fitting
-  ##
 
   pe <- policy_eval(
     policy_data = pd,
@@ -868,7 +866,8 @@ test_that("policy_learn with type 'blip' has the correct outputs for the stochas
 
   expect_equal(
     IC(pe),
-    matrix(ref_IC)
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   expect_equal(
@@ -880,6 +879,5 @@ test_that("policy_learn with type 'blip' has the correct outputs for the stochas
     get_element(pe, "coef_ipw"),
     ref_pe_ipw
   )
-
 
 })

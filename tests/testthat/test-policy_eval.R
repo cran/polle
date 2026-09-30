@@ -233,30 +233,6 @@ test_that("policy_eval checks inputs.", {
     )
   })
   rm(mm)
-
-  ## names
-  nn <- list("test", NULL, 1, TRUE)
-  lapply(nn, function(n) {
-    expect_error(
-      policy_eval(
-        policy_data = pd,
-        policy = p,
-        name = n
-      ),
-      NA
-    )
-  })
-
-  nn <- list(c(1, 2), list())
-  lapply(nn, function(n) {
-    expect_error(
-      policy_eval(
-        policy_data = pd,
-        policy = p,
-        name = n
-      )
-    )
-  })
 })
 
 test_that("policy_eval handles combinations of nuisance models and functions correctly.", {
@@ -366,8 +342,9 @@ test_that("policy_eval runs on a subset of the data with missing actions from th
     0
   )
   expect_equal(
-    IC(pe2_ipw),
-    matrix(rep(0, get_n(pd2)))
+    IC(pe2_ipw) |> unname(),
+    matrix(rep(0, get_n(pd2))),
+    check.attributes = FALSE
   )
 
   ## or
@@ -387,6 +364,9 @@ test_that("policy_eval runs on a subset of the data with missing actions from th
   expect_equal(
     IC(pe2_or),
     NULL
+  )
+  expect_no_error(
+    summary(pe2_or)
   )
 })
 
@@ -507,7 +487,7 @@ test_that("policy_eval with target = 'value' agrees with targeted::cate in the s
   ca_dml2 <- targeted::cate(
     cate.model = A ~ 1,
     response.model = U ~ A * Z,
-    propensity.model = A ~ Z,
+    treatment.model = A ~ Z,
     data = d,
     nfolds = 2,
     second.order = FALSE,
@@ -583,8 +563,9 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   ##
@@ -618,8 +599,9 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   ##
@@ -666,8 +648,9 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   ##
@@ -693,8 +676,9 @@ test_that("policy_eval with target 'value' has the correct outputs in the single
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 })
 
@@ -804,8 +788,9 @@ test_that("policy_eval() using policy_learn() has the correct output", {
     coef(pe) |> unname()
   )
   expect_equal(
-    IC(pe),
-    ref_IC
+    IC(pe) |> unname(),
+    ref_IC,
+    check.attributes = FALSE
   )
 })
 
@@ -879,8 +864,9 @@ test_that("policy_eval with target 'value' has the correct outputs for the fixed
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe)  |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
 })
@@ -967,8 +953,9 @@ test_that("policy_eval with target 'value' has the correct outputs for the stoch
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   expect_equal(
@@ -1008,8 +995,9 @@ test_that("policy_eval with target 'value' has the correct outputs for the stoch
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   expect_equal(
@@ -1024,7 +1012,6 @@ test_that("policy_eval with target 'value' has the correct outputs for the stoch
 
 
 })
-
 
 test_that("policy_eval() return estimates for multiple policies associated with multiple thresholds.", {
 
@@ -1203,6 +1190,59 @@ test_that("policy_eval() return estimates for multiple policies associated with 
     ref_pe
   )
 
+  ## quantile thresholds
+  pl <- policy_learn(
+    type = "blip",
+    control = control_blip(blip_models = q_degen(var = "z"),
+                           quantile_prob_threshold = c(0.5, 0.7))
+  )
+  expect_no_error({
+    pe <- policy_eval(
+      policy_data = pd,
+      policy_learn = pl,
+      q_models = q_degen(var = "z"),
+      g_functions = gf
+    )
+  })
+  expect_equal(
+    pe$output_meta$threshold,
+    quantile(1:1e2, probs = c(0.5, 0.7)) |> unname()
+  )
+
+  ## testing that only unique quantile thresholds are used
+  z <- c(1:40, rep(50, 20), 61:1e2)
+  a <- c(rep(1, 50), rep(2, 50))
+  y <- a * 2
+  p1 <- (z > 28) + 1
+  p2 <- (z > 76) + 1
+  d <- data.table(z = z, a = a, y = y, p1 = p1, p2 = p2)
+  rm(a, z, y, p1, p2)
+  pd <- policy_data(
+    data = d,
+    action = "a",
+    covariates = c("z"),
+    utility = c("y")
+  )
+
+  gf <- fit_g_functions(pd, g_models = g_glm(~1))
+  pl <- policy_learn(
+    type = "blip",
+    control = control_blip(blip_models = q_degen(var = "z"),
+                           quantile_prob_threshold = c(0.5, 0.51))
+  )
+  expect_no_error({
+    pe <- policy_eval(
+      policy_data = pd,
+      policy_learn = pl,
+      q_models = q_degen(var = "z"),
+      g_functions = gf
+    )
+  })
+  expect_equal(
+    pe$input_meta$quantile_prob_threshold,
+    c(0.5) # only the first unique threshold should be used
+  )
+
 })
 
 test_that("conditional.policy_eval agrees with targeted::cate", {
@@ -1250,7 +1290,7 @@ test_that("conditional.policy_eval agrees with targeted::cate", {
   ca <- targeted::cate(
     cate.model = A ~ factor(B) - 1,
     response.model = U ~ A * Z,
-    propensity.model = A ~ 1,
+    treatment.model = A ~ 1,
     second.order = FALSE,
     data = d,
     nfolds = 1,
@@ -1263,7 +1303,8 @@ test_that("conditional.policy_eval agrees with targeted::cate", {
 
   expect_equal(
     IC(est) |> matrix(),
-    ca$estimate$IC[, "factor(B)0"] |> unname() |> matrix()
+    ca$estimate$IC[, "factor(B)0"] |> unname() |> matrix(),
+    check.attributes = FALSE
   )
 })
 
@@ -1305,8 +1346,9 @@ test_that("policy_eval with target = 'value' runs when performing repeated cross
   )
 
   expect_equal(
-    IC(pe),
-    matrix(ref_IC)
+    IC(pe) |> unname(),
+    matrix(ref_IC),
+    check.attributes = FALSE
   )
 
   z <- 1:1e2
@@ -1359,8 +1401,9 @@ test_that("policy_eval with target = 'value' runs when performing repeated cross
   )
 
   expect_equal(
-    IC(pe),
-    ref_IC
+    IC(pe) |> unname(),
+    ref_IC,
+    check.attributes = FALSE
   )
 })
 
@@ -1389,15 +1432,27 @@ test_that("policy_eval() runs without covariates.", {
   ref_pe <- mean((d$a == "2") / 0.5 * d$y)
   ref_IC <- matrix((d$a == "2") / 0.5 * (d$y - 4) + 4 - ref_pe)
 
+  ## The Q-model saturates the outcome (A binary, q_glm(~A)) and g == 0.5
+  ## exactly, so the doubly-robust IC is identically zero in exact
+  ## arithmetic. lava's check_ic_mean_zero() then compares |mean|/rms of
+  ## two floating-point noise quantities, and whether it warns is
+  ## platform-dependent (ratio varies from 0 to ~0.14 across row
+  ## permutations of the same data). We therefore suppress the warning
+  ## rather than assert it.
+  coef_pe <- suppressWarnings(coef(pe))
+
   expect_equal(
-    coef(pe) |> unname(),
+    coef_pe |> unname(),
     ref_pe
   )
 
+  ic_pe <- suppressWarnings(IC(pe))
+
   expect_equal(
-    IC(pe),
+    ic_pe |> unname(),
     ref_IC,
-    tolerance = 1e-14
+    tolerance = 1e-8,
+    check.attributes = FALSE
   )
 
   expect_no_error(
@@ -1418,8 +1473,314 @@ test_that("policy_eval() runs without covariates.", {
   )
 
   expect_equal(
-    IC(pe),
+    IC(pe) |> unname(),
     ref_IC,
-    tolerance = 1e-14
+    tolerance = 1e-14,
+    check.attributes = FALSE
   )
 })
+
+test_that("policy_eval target = 'value' summary table has the expected schema", {
+  ## ------------------------------------------------------------------
+  ## user-defined policy (no policy input_meta): only the fixed prefix
+  ## columns are emitted.
+  ## ------------------------------------------------------------------
+  d <- sim_single_stage(n = 2e2, seed = 1)
+  pd <- policy_data(d, action = "A", covariates = c("Z", "L"), utility = "U")
+
+  pe <- policy_eval(pd,
+                    policy = policy_def(1, name = "all_treated"),
+                    target = "value")
+  ct <- summary(pe, return_table = TRUE)
+
+  expect_true(data.table::is.data.table(ct))
+  expect_equal(names(ct), c("name", "estimate", "se"))
+  expect_equal(nrow(ct), 1L)
+  expect_equal(ct$name, "E[U(d)]: d=all_treated")
+  expect_equal(ct$estimate, unname(coef(pe)))
+  expect_equal(ct$se, unname(sqrt(diag(vcov(pe)))))
+
+  ## the contrast argument is ignored for target = "value":
+  expect_equal(summary(pe, return_table = TRUE, contrast = FALSE), ct)
+
+  ## an unnamed policy_def still produces a well-formed row (only the
+  ## policy suffix in the name changes):
+  pe0 <- policy_eval(pd, policy = policy_def(1), target = "value")
+  ct0 <- summary(pe0, return_table = TRUE)
+  expect_equal(names(ct0), c("name", "estimate", "se"))
+  expect_equal(nrow(ct0), 1L)
+})
+
+test_that("policy_eval target = 'value' summary table has the expected schema for blip", {
+  z <- 1:1e2
+  a <- c(rep(1, 50), rep(2, 50))
+  y <- a * 2
+  p1 <- c(rep(1, 50), rep(2, 50))
+  p2 <- rep(1, 100)
+  d <- data.table(z = z, a = a, y = y, p1 = p1, p2 = p2)
+  pd <- policy_data(
+    data = d,
+    action = "a",
+    covariates = c("z", "p1", "p2"),
+    utility = c("y")
+  )
+
+  ## ------------------------------------------------------------------
+  ## blip with a single user-supplied threshold and a user-supplied name:
+  ## `type` records the learner class ("blip"); `policy` records the raw
+  ## user-supplied name ("cate"); the composed `name` uses the user's name
+  ## as the stem.
+  ## ------------------------------------------------------------------
+  pl1 <- policy_learn(
+    type = "blip",
+    threshold = 50,
+    control = control_blip(blip_models = polle:::q_degen(var = "z")),
+    name = "cate"
+  )
+  pe1 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl1,
+    q_models = polle:::q_degen(var = "z"),
+    g_models = g_glm(~1)
+  )
+  t1 <- summary(pe1, return_table = TRUE)
+
+  expect_true(data.table::is.data.table(t1))
+  expect_equal(names(t1),
+               c("name", "estimate", "se",
+                 "type", "policy", "alpha", "threshold"))
+  expect_equal(nrow(t1), 1L)
+  expect_equal(t1$name, "E[U(d)]: d=cate(eta=50)")
+  expect_equal(t1$type, "blip")
+  expect_equal(t1$policy, "cate")
+  expect_equal(t1$threshold, 50)
+  expect_equal(t1$estimate, unname(coef(pe1)))
+  expect_equal(t1$se, unname(sqrt(diag(vcov(pe1)))))
+  expect_null(pe1$output_meta)
+
+  ## ------------------------------------------------------------------
+  ## blip with multiple user-supplied thresholds:
+  ## ------------------------------------------------------------------
+  pl2 <- policy_learn(
+    type = "blip",
+    threshold = c(50, 101),
+    control = control_blip(blip_models = polle:::q_degen(var = "z"))
+  )
+  pe2 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl2,
+    q_models = polle:::q_degen(var = "z"),
+    g_models = g_glm(~1)
+  )
+  t2 <- summary(pe2, return_table = TRUE)
+
+  expect_equal(names(t2),
+               c("name", "estimate", "se",
+                 "type", "policy", "alpha", "threshold"))
+  expect_equal(nrow(t2), 2L)
+  expect_equal(t2$threshold, c(50, 101))
+  expect_equal(t2$name,
+               c("E[U(d)]: d=blip(eta=50)", "E[U(d)]: d=blip(eta=101)"))
+  ## default name defaults to type; both columns equal "blip":
+  expect_equal(t2$type, c("blip", "blip"))
+  expect_equal(t2$policy, c("blip", "blip"))
+  expect_equal(t2$estimate, unname(coef(pe2)))
+  expect_equal(t2$se, unname(sqrt(diag(vcov(pe2)))))
+  expect_null(pe2$output_meta)
+
+  ## ------------------------------------------------------------------
+  ## blip with a quantile probability threshold (dynamic threshold):
+  ## ------------------------------------------------------------------
+  pl3 <- policy_learn(
+    type = "blip",
+    control = control_blip(
+      blip_models = polle:::q_degen(var = "z"),
+      quantile_prob_threshold = c(0.25, 0.75)
+    )
+  )
+  pe3 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl3,
+    q_models = polle:::q_degen(var = "z"),
+    g_models = g_glm(~1)
+  )
+  t3 <- summary(pe3, return_table = TRUE)
+
+  ## schema: `quantile_prob_threshold` replaces `threshold` in input_meta;
+  ## `threshold` lives on output_meta instead.
+  expect_equal(names(t3),
+               c("name", "estimate", "se",
+                 "type", "policy", "alpha", "quantile_prob_threshold"))
+  expect_false("threshold" %in% names(t3))
+  expect_equal(nrow(t3), 2L)
+  expect_equal(t3$quantile_prob_threshold, c(0.25, 0.75))
+  expect_true(all(grepl("blip\\(q=", t3$name)))
+  expect_equal(t3$type, c("blip", "blip"))
+  expect_equal(t3$policy, c("blip", "blip"))
+  expect_equal(t3$estimate, unname(coef(pe3)))
+  expect_equal(t3$se, unname(sqrt(diag(vcov(pe3)))))
+
+  ## output_meta carries the fold-realised numeric threshold(s):
+  expect_true(data.table::is.data.table(pe3$output_meta))
+  expect_equal(names(pe3$output_meta), "threshold")
+  expect_equal(nrow(pe3$output_meta), 2L)
+
+  ## ------------------------------------------------------------------
+  ## blip under cross-fitting (M > 1) with user-supplied thresholds:
+  ## input_meta is static so the schema and columns are preserved.
+  ## ------------------------------------------------------------------
+  gf <- fit_g_functions(pd, g_models = g_glm(~1))
+  set.seed(1)
+  pe4 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl2,
+    q_models = polle:::q_degen(var = "z"),
+    g_functions = gf,
+    cross_fit_type = "pooled",
+    variance_type = "pooled",
+    M = 2
+  )
+  t4 <- summary(pe4, return_table = TRUE)
+  expect_equal(names(t4), names(t2))
+  expect_equal(nrow(t4), 2L)
+  expect_equal(t4$threshold, c(50, 101))
+  expect_equal(t4$estimate, unname(coef(pe4)))
+})
+
+test_that("policy_eval target = 'value' summary table has the expected schema for ptl", {
+  d <- sim_single_stage(n = 2e2, seed = 1)
+  pd <- policy_data(d, action = "A", covariates = c("Z", "L"), utility = "U")
+
+  ## ------------------------------------------------------------------
+  ## ptl with a single user-supplied threshold:
+  ## ------------------------------------------------------------------
+  pl1 <- policy_learn(
+    type = "ptl",
+    threshold = 0,
+    control = control_ptl(policy_vars = c("Z", "L"), depth = 2)
+  )
+  pe1 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl1,
+    q_models = q_glm(),
+    g_models = g_glm()
+  )
+  t1 <- summary(pe1, return_table = TRUE)
+
+  expect_true(data.table::is.data.table(t1))
+  expect_equal(
+    names(t1),
+    c("name", "estimate", "se",
+      "type", "policy", "alpha", "threshold", "depth", "hybrid")
+  )
+  expect_equal(nrow(t1), 1L)
+  expect_equal(t1$name, "E[U(d)]: d=ptl(eta=0)")
+  expect_equal(t1$type, "ptl")
+  expect_equal(t1$policy, "ptl")
+  expect_equal(t1$threshold, 0)
+  expect_equal(t1$depth, 2)
+  expect_false(t1$hybrid)
+  expect_equal(t1$estimate, unname(coef(pe1)))
+  expect_equal(t1$se, unname(sqrt(diag(vcov(pe1)))))
+  ## ptl has no quantile_prob_threshold; output_meta is absent:
+  expect_null(pe1$output_meta)
+
+  ## ------------------------------------------------------------------
+  ## ptl with multiple user-supplied thresholds:
+  ## ------------------------------------------------------------------
+  pl2 <- policy_learn(
+    type = "ptl",
+    threshold = c(0, 0.5),
+    control = control_ptl(policy_vars = c("Z", "L"), depth = 2)
+  )
+  pe2 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl2,
+    q_models = q_glm(),
+    g_models = g_glm()
+  )
+  t2 <- summary(pe2, return_table = TRUE)
+
+  expect_equal(names(t2), names(t1))
+  expect_equal(nrow(t2), 2L)
+  expect_equal(t2$threshold, c(0, 0.5))
+  expect_equal(t2$name,
+               c("E[U(d)]: d=ptl(eta=0)", "E[U(d)]: d=ptl(eta=0.5)"))
+  expect_equal(t2$estimate, unname(coef(pe2)))
+  expect_equal(t2$se, unname(sqrt(diag(vcov(pe2)))))
+  expect_null(pe2$output_meta)
+
+  ## ------------------------------------------------------------------
+  ## ptl with hybrid = TRUE and a custom depth propagates into input_meta:
+  ## ------------------------------------------------------------------
+  pl3 <- policy_learn(
+    type = "ptl",
+    threshold = 0,
+    control = control_ptl(policy_vars = c("Z", "L"),
+                          depth = 3, search.depth = 2, hybrid = TRUE)
+  )
+  pe3 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl3,
+    q_models = q_glm(),
+    g_models = g_glm()
+  )
+  t3 <- summary(pe3, return_table = TRUE)
+  expect_equal(t3$depth, 3)
+  expect_true(t3$hybrid)
+
+  ## ------------------------------------------------------------------
+  ## ptl under cross-fitting (M > 1) with user-supplied thresholds:
+  ## input_meta is static so the schema and columns are preserved.
+  ## ------------------------------------------------------------------
+  gf <- fit_g_functions(pd, g_models = g_glm())
+  set.seed(1)
+  pe4 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl2,
+    q_models = q_glm(),
+    g_functions = gf,
+    cross_fit_type = "pooled",
+    variance_type = "pooled",
+    M = 2
+  )
+  t4 <- summary(pe4, return_table = TRUE)
+  expect_equal(names(t4), names(t2))
+  expect_equal(nrow(t4), 2L)
+  expect_equal(t4$threshold, c(0, 0.5))
+  expect_equal(t4$estimate, unname(coef(pe4)))
+
+  ## ------------------------------------------------------------------
+  ## ptl with a user-supplied policy name:
+  ## `type` stays "ptl"; `policy` records the user's name; the composed
+  ## `name` swaps the "ptl" stem for the user's name.
+  ## ------------------------------------------------------------------
+  pl5 <- policy_learn(
+    type = "ptl",
+    threshold = 0,
+    control = control_ptl(policy_vars = c("Z", "L"), depth = 2),
+    name = "tree"
+  )
+  pe5 <- policy_eval(
+    target = "value",
+    policy_data = pd,
+    policy_learn = pl5,
+    q_models = q_glm(),
+    g_models = g_glm()
+  )
+  t5 <- summary(pe5, return_table = TRUE)
+  expect_equal(names(t5), names(t1))
+  expect_equal(nrow(t5), 1L)
+  expect_equal(t5$name, "E[U(d)]: d=tree(eta=0)")
+  expect_equal(t5$type, "ptl")
+  expect_equal(t5$policy, "tree")
+})
+

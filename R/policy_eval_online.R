@@ -16,7 +16,7 @@
 #' @param g_functions Fitted g-model objects, see [nuisance_functions].
 #' Preferably, use \code{g_models}.
 #' @param g_models List of action probability models/g-models for each stage
-#' created by [g_empir()], [g_glm()], [g_rf()], [g_sl()] or similar functions.
+#' created by [g_empir()], [g_glm()], [g_rf()] or similar functions.
 #' Only used for evaluation if \code{g_functions} is \code{NULL}.
 #' If a single model is provided and \code{g_full_history} is \code{FALSE},
 #' a single g-model is fitted across all stages. If \code{g_full_history} is
@@ -28,7 +28,7 @@
 #' Only valid if the Q-functions are fitted using the same policy.
 #' Preferably, use \code{q_models}.
 #' @param q_models Outcome regression models/Q-models created by
-#' [q_glm()], [q_rf()], [q_sl()] or similar functions.
+#' [q_glm()], [q_rf()] or similar functions.
 #' Only used for evaluation if \code{q_functions} is \code{NULL}.
 #' If a single model is provided, the model is reused at every stage.
 #' @param q_full_history Similar to g_full_history.
@@ -51,7 +51,6 @@
 #' @param M Number of folds for online estimation/sequential validation excluding the initial training block, see details.
 #' @param train_block_size Integer. Size of the initial training block only
 #' used for training of the policy and nuisance models, see details.
-#' @param name Character string.
 #' @param min_subgroup_size Minimum number of observations in the evaluated subgroup (Only used if target = "subgroup").
 #' @return \code{policy_eval_online()} returns an object of inherited class "policy_eval_online", "policy_eval".
 #' The object is a list containing the following elements:
@@ -226,7 +225,6 @@ policy_eval_online <- function(policy_data,
                                target = "value",
                                M = 4,
                                train_block_size = get_n(policy_data) / 5,
-                               name = NULL,
                                min_subgroup_size = 1) {
   ## setting type to "dr":
   type <- "dr"
@@ -332,9 +330,8 @@ policy_eval_on <- function(args,
       pe <- do.call(what = "policy_eval_type", args = eval_args)
 
       ic <- IC(pe)
-      sigma2 <- var(ic)*(nrow(ic)-1)/nrow(ic)
+      sigma2 <- var(ic) * (nrow(ic) - 1) / nrow(ic)
       sigma2 <- diag(sigma2)
-      names(sigma2) <- get_element(pe, "name")
 
       out <- list(sigma2 = sigma2)
 
@@ -347,7 +344,6 @@ policy_eval_on <- function(args,
           simplify = FALSE
         )
         subgroup_prob <- unlist(subgroup_prob)
-        names(subgroup_prob) <- get_element(pe, "name")
         out[["subgroup_prob"]] <- subgroup_prob
       }
 
@@ -396,6 +392,7 @@ policy_eval_on <- function(args,
 
     coef <- colSums(scaled_Z) / colSums(Gamma)
     vcov <- colMeans(Gamma)^(-2)/nrow(Gamma)
+    name <- get_element(sequential_fits[[1]], "name")
   } else if (target == "subgroup") {
     online_onestep_terms <- lapply(sequential_fits, function(x){
       subgroup_indicator <- get_element(x, "subgroup_indicator")
@@ -435,6 +432,10 @@ policy_eval_on <- function(args,
 
     coef <- colSums(scaled_D) / colSums(Gamma)
     vcov <- colMeans(Gamma)^(-2)/nrow(Gamma)
+    ## the online estimator reports the two subgroup average treatment effects
+    ## (contrasts of the per-subgroup potential outcome means E[U(a)|d]):
+    name <- get_element(sequential_fits[[1]], "contrast_name",
+                        check_name = FALSE)
 
   } else {
     mes <- "policy_eval_online only implemented for target = 'value' or 'subgroup'."
@@ -449,7 +450,7 @@ policy_eval_on <- function(args,
     id = id,
     train_sequential_index = unname(train_sequential_index),
     valid_sequential_index = unname(valid_sequential_index),
-    name = get_element(sequential_fits[[1]], "name")
+    name = name
   )
 
   return(out)
@@ -473,10 +474,45 @@ policy_eval_online_object <- function(coef,
 
 #' @rdname policy_eval
 #' @export
+coef.policy_eval_online <- function(object, ...) {
+  ## the online estimator stores the reported estimates (value or subgroup
+  ## average treatment effects) directly; unlike coef.policy_eval it does not
+  ## collapse per-subgroup potential outcome means into contrasts:
+  return(get_element(object, "coef"))
+}
+
+#' @rdname policy_eval
+#' @export
 vcov.policy_eval_online <- function(object, ...) {
   vcov <- get_element(object, "vcov")
   tmp <- matrix(NA, ncol = length(vcov), nrow = length(vcov))
   diag(tmp) <- vcov
   vcov <- tmp
   return(vcov)
+}
+
+#' @rdname policy_eval
+#' @export
+summary.policy_eval_online <- function(object, labels = NULL, contrast = TRUE, ...) {
+  if (!isTRUE((contrast))) {
+    stop("Per-action mean potential subgroup outcomes not available for policy_eval_online().")
+  }
+  if (is.null(labels)) {
+    labels <- get_element(object, "name", check_name = FALSE)
+  }
+  p <- length(coef(object))
+  if (is.null(labels)) {
+    target <- get_element(object, "target")
+    if (p == 1) {
+      labels <- target
+    } else {
+      labels <- paste0(target, seq(p))
+    }
+  }
+  est <- lava::estimate(NULL,
+                        coef = coef(object),
+                        vcov = vcov(object),
+                        labels = labels)
+
+  return(est)
 }

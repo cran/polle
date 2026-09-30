@@ -27,7 +27,6 @@ policy_eval_online(
   target = "value",
   M = 4,
   train_block_size = get_n(policy_data)/5,
-  name = NULL,
   min_subgroup_size = 1
 )
 }
@@ -42,7 +41,7 @@ policy_eval_online(
 Preferably, use \code{g_models}.}
 
 \item{g_models}{List of action probability models/g-models for each stage
-created by \code{\link[=g_empir]{g_empir()}}, \code{\link[=g_glm]{g_glm()}}, \code{\link[=g_rf]{g_rf()}}, \code{\link[=g_sl]{g_sl()}} or similar functions.
+created by \code{\link[=g_empir]{g_empir()}}, \code{\link[=g_glm]{g_glm()}}, \code{\link[=g_rf]{g_rf()}} or similar functions.
 Only used for evaluation if \code{g_functions} is \code{NULL}.
 If a single model is provided and \code{g_full_history} is \code{FALSE},
 a single g-model is fitted across all stages. If \code{g_full_history} is
@@ -58,7 +57,7 @@ Only valid if the Q-functions are fitted using the same policy.
 Preferably, use \code{q_models}.}
 
 \item{q_models}{Outcome regression models/Q-models created by
-\code{\link[=q_glm]{q_glm()}}, \code{\link[=q_rf]{q_rf()}}, \code{\link[=q_sl]{q_sl()}} or similar functions.
+\code{\link[=q_glm]{q_glm()}}, \code{\link[=q_rf]{q_rf()}} or similar functions.
 Only used for evaluation if \code{q_functions} is \code{NULL}.
 If a single model is provided, the model is reused at every stage.}
 
@@ -94,8 +93,6 @@ in the single-stage case with a dichotomous action set.}
 
 \item{train_block_size}{Integer. Size of the initial training block only
 used for training of the policy and nuisance models, see details.}
-
-\item{name}{Character string.}
 
 \item{min_subgroup_size}{Minimum number of observations in the evaluated subgroup (Only used if target = "subgroup").}
 }
