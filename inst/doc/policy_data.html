@@ -392,7 +392,7 @@ variables <span class="math inline">\((Z, L, B)\)</span>, binary action
 variable <span class="math inline">\(A\)</span>, and utility outcome
 <span class="math inline">\(U\)</span>. We use
 <code>sim_single_stage()</code> to simulate data:</p>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>(d <span class="ot">&lt;-</span> <span class="fu">sim_single_stage</span>(<span class="at">n =</span> <span class="fl">5e2</span>, <span class="at">seed=</span><span class="dv">1</span>)) <span class="sc">|&gt;</span> <span class="fu">head</span>()</span>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>(d <span class="ot">&lt;-</span> <span class="fu">sim_single_stage</span>(<span class="at">n =</span> <span class="dv">5</span>e2, <span class="at">seed=</span><span class="dv">1</span>)) <span class="sc">|&gt;</span> <span class="fu">head</span>()</span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt;            Z          L B A          U</span></span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; 1  1.2879704 -1.4795962 0 1 -0.9337648</span></span>
 <span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; 2  1.6184181  1.2966436 0 1  6.7506026</span></span>
@@ -461,7 +461,7 @@ C_{k}})\)</span> are the state covariates at stage k, <span class="math inline">
 <span class="math inline">\(U=U_{1}+U_{2}+U_{3}\)</span>.</p>
 <p>We use <code>sim_two_stage_multi_actions()</code> to simulate
 data:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">sim_two_stage_multi_actions</span>(<span class="at">n=</span><span class="fl">2e3</span>, <span class="at">seed =</span> <span class="dv">1</span>)</span>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">sim_two_stage_multi_actions</span>(<span class="at">n=</span><span class="dv">2</span>e3, <span class="at">seed =</span> <span class="dv">1</span>)</span>
 <span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="fu">colnames</span>(d)</span>
 <span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt;  [1] &quot;B&quot;   &quot;BB&quot;  &quot;L_1&quot; &quot;C_1&quot; &quot;A_1&quot; &quot;L_2&quot; &quot;C_2&quot; &quot;A_2&quot; &quot;L_3&quot; &quot;U_1&quot; &quot;U_2&quot; &quot;U_3&quot;</span></span></code></pre></div>
 <p>Note that the data is in wide format. The data is transformed using
@@ -606,7 +606,7 @@ processes with a stochastic number of stages, see Section 3.5 in <span class="ci
 using <code>sim_multi_stage()</code>. Detailed information on the
 simulation is available in <code>?sim_multi_stage</code>. We simulate
 data from 2000 iid subjects:</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">sim_multi_stage</span>(<span class="fl">2e3</span>, <span class="at">seed =</span> <span class="dv">1</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>d <span class="ot">&lt;-</span> <span class="fu">sim_multi_stage</span>(<span class="dv">2</span>e3, <span class="at">seed =</span> <span class="dv">1</span>)</span></code></pre></div>
 <p>As described, the stage data is in long format:</p>
 <div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>d<span class="sc">$</span>stage_data[, <span class="sc">-</span>(<span class="dv">9</span><span class="sc">:</span><span class="dv">10</span>)] <span class="sc">|&gt;</span> <span class="fu">head</span>()</span>
 <span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="co">#&gt;       id stage event        t      A          X     X_lead         U</span></span>
@@ -681,7 +681,7 @@ decision stages:</p>
 <div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">sessionInfo</span>()</span>
 <span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a><span class="co">#&gt; R version 4.5.2 (2025-10-31)</span></span>
 <span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a><span class="co">#&gt; Platform: aarch64-apple-darwin25.1.0</span></span>
-<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a><span class="co">#&gt; Running under: macOS Tahoe 26.7</span></span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a><span class="co">#&gt; Running under: macOS Tahoe 26.7.1</span></span>
 <span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a><span class="co">#&gt; Matrix products: default</span></span>
 <span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a><span class="co">#&gt; BLAS:   /Users/oano/.asdf/installs/R/4.5.2/lib/R/lib/libRblas.dylib </span></span>
@@ -697,28 +697,27 @@ decision stages:</p>
 <span id="cb18-17"><a href="#cb18-17" tabindex="-1"></a><span class="co">#&gt; [1] stats     graphics  grDevices utils     datasets  methods   base     </span></span>
 <span id="cb18-18"><a href="#cb18-18" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb18-19"><a href="#cb18-19" tabindex="-1"></a><span class="co">#&gt; other attached packages:</span></span>
-<span id="cb18-20"><a href="#cb18-20" tabindex="-1"></a><span class="co">#&gt; [1] ggplot2_4.0.3       data.table_1.18.6.1 polle_1.6.5        </span></span>
+<span id="cb18-20"><a href="#cb18-20" tabindex="-1"></a><span class="co">#&gt; [1] ggplot2_4.0.3       data.table_1.18.6.1 polle_1.6.6        </span></span>
 <span id="cb18-21"><a href="#cb18-21" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb18-22"><a href="#cb18-22" tabindex="-1"></a><span class="co">#&gt; loaded via a namespace (and not attached):</span></span>
-<span id="cb18-23"><a href="#cb18-23" tabindex="-1"></a><span class="co">#&gt;  [1] sass_0.4.10            future_1.76.0          generics_0.1.4        </span></span>
-<span id="cb18-24"><a href="#cb18-24" tabindex="-1"></a><span class="co">#&gt;  [4] lattice_0.23-1         listenv_1.0.0          digest_0.6.39         </span></span>
-<span id="cb18-25"><a href="#cb18-25" tabindex="-1"></a><span class="co">#&gt;  [7] magrittr_2.0.5         evaluate_1.0.5         grid_4.5.2            </span></span>
-<span id="cb18-26"><a href="#cb18-26" tabindex="-1"></a><span class="co">#&gt; [10] RColorBrewer_1.1-3     mvtnorm_1.4-2          policytree_1.2.5      </span></span>
-<span id="cb18-27"><a href="#cb18-27" tabindex="-1"></a><span class="co">#&gt; [13] fastmap_1.2.0          jsonlite_2.0.0         Matrix_1.7-6          </span></span>
-<span id="cb18-28"><a href="#cb18-28" tabindex="-1"></a><span class="co">#&gt; [16] survival_3.8-12        scales_1.4.0           numDeriv_2016.8-1.1   </span></span>
-<span id="cb18-29"><a href="#cb18-29" tabindex="-1"></a><span class="co">#&gt; [19] codetools_0.2-20       jquerylib_0.1.4        lava_1.9.3            </span></span>
-<span id="cb18-30"><a href="#cb18-30" tabindex="-1"></a><span class="co">#&gt; [22] cli_3.6.6              rlang_1.3.0            mets_1.3.12           </span></span>
-<span id="cb18-31"><a href="#cb18-31" tabindex="-1"></a><span class="co">#&gt; [25] parallelly_1.48.0      future.apply_1.20.2    splines_4.5.2         </span></span>
-<span id="cb18-32"><a href="#cb18-32" tabindex="-1"></a><span class="co">#&gt; [28] RcppArmadillo_15.6.0-1 withr_3.0.3            cachem_1.1.0          </span></span>
-<span id="cb18-33"><a href="#cb18-33" tabindex="-1"></a><span class="co">#&gt; [31] yaml_2.3.12            otel_0.2.0             tools_4.5.2           </span></span>
-<span id="cb18-34"><a href="#cb18-34" tabindex="-1"></a><span class="co">#&gt; [34] parallel_4.5.2         dplyr_1.2.1            globals_0.19.1        </span></span>
-<span id="cb18-35"><a href="#cb18-35" tabindex="-1"></a><span class="co">#&gt; [37] vctrs_0.7.3            R6_2.6.1               lifecycle_1.0.5       </span></span>
-<span id="cb18-36"><a href="#cb18-36" tabindex="-1"></a><span class="co">#&gt; [40] pkgconfig_2.0.3        timereg_2.0.7          progressr_1.0.0       </span></span>
-<span id="cb18-37"><a href="#cb18-37" tabindex="-1"></a><span class="co">#&gt; [43] bslib_0.12.0           pillar_1.11.1          gtable_0.3.6          </span></span>
-<span id="cb18-38"><a href="#cb18-38" tabindex="-1"></a><span class="co">#&gt; [46] glue_1.8.1             Rcpp_1.1.2             xfun_0.61             </span></span>
-<span id="cb18-39"><a href="#cb18-39" tabindex="-1"></a><span class="co">#&gt; [49] tibble_3.3.1           tidyselect_1.2.1       knitr_1.52            </span></span>
-<span id="cb18-40"><a href="#cb18-40" tabindex="-1"></a><span class="co">#&gt; [52] farver_2.1.2           htmltools_0.5.9        rmarkdown_2.32        </span></span>
-<span id="cb18-41"><a href="#cb18-41" tabindex="-1"></a><span class="co">#&gt; [55] labeling_0.4.3         compiler_4.5.2         S7_0.2.2</span></span></code></pre></div>
+<span id="cb18-23"><a href="#cb18-23" tabindex="-1"></a><span class="co">#&gt;  [1] sass_0.4.10         future_1.76.0       generics_0.1.4     </span></span>
+<span id="cb18-24"><a href="#cb18-24" tabindex="-1"></a><span class="co">#&gt;  [4] lattice_0.23-1      listenv_1.1.0       digest_0.6.39      </span></span>
+<span id="cb18-25"><a href="#cb18-25" tabindex="-1"></a><span class="co">#&gt;  [7] magrittr_2.0.5      evaluate_1.0.5      grid_4.5.2         </span></span>
+<span id="cb18-26"><a href="#cb18-26" tabindex="-1"></a><span class="co">#&gt; [10] RColorBrewer_1.1-3  policytree_1.2.5    fastmap_1.2.0      </span></span>
+<span id="cb18-27"><a href="#cb18-27" tabindex="-1"></a><span class="co">#&gt; [13] jsonlite_2.0.0      Matrix_1.7-6        survival_3.8-12    </span></span>
+<span id="cb18-28"><a href="#cb18-28" tabindex="-1"></a><span class="co">#&gt; [16] scales_1.4.0        codetools_0.2-20    jquerylib_0.1.4    </span></span>
+<span id="cb18-29"><a href="#cb18-29" tabindex="-1"></a><span class="co">#&gt; [19] lava_1.9.3.9000     cli_3.6.6           rlang_1.3.0        </span></span>
+<span id="cb18-30"><a href="#cb18-30" tabindex="-1"></a><span class="co">#&gt; [22] parallelly_1.48.0   future.apply_1.20.2 splines_4.5.2      </span></span>
+<span id="cb18-31"><a href="#cb18-31" tabindex="-1"></a><span class="co">#&gt; [25] withr_3.0.3         cachem_1.1.0        yaml_2.3.12        </span></span>
+<span id="cb18-32"><a href="#cb18-32" tabindex="-1"></a><span class="co">#&gt; [28] otel_0.2.0          tools_4.5.2         parallel_4.5.2     </span></span>
+<span id="cb18-33"><a href="#cb18-33" tabindex="-1"></a><span class="co">#&gt; [31] dplyr_1.2.1         globals_0.19.1      vctrs_0.7.3        </span></span>
+<span id="cb18-34"><a href="#cb18-34" tabindex="-1"></a><span class="co">#&gt; [34] R6_2.6.1            lifecycle_1.0.5     pkgconfig_2.0.3    </span></span>
+<span id="cb18-35"><a href="#cb18-35" tabindex="-1"></a><span class="co">#&gt; [37] progressr_1.0.0     bslib_0.12.0        pillar_1.11.1      </span></span>
+<span id="cb18-36"><a href="#cb18-36" tabindex="-1"></a><span class="co">#&gt; [40] gtable_0.3.6        glue_1.8.1          Rcpp_1.1.2         </span></span>
+<span id="cb18-37"><a href="#cb18-37" tabindex="-1"></a><span class="co">#&gt; [43] xfun_0.61           tibble_3.3.1        tidyselect_1.2.1   </span></span>
+<span id="cb18-38"><a href="#cb18-38" tabindex="-1"></a><span class="co">#&gt; [46] knitr_1.52          farver_2.1.2        htmltools_0.5.9    </span></span>
+<span id="cb18-39"><a href="#cb18-39" tabindex="-1"></a><span class="co">#&gt; [49] rmarkdown_2.32      labeling_0.4.3      compiler_4.5.2     </span></span>
+<span id="cb18-40"><a href="#cb18-40" tabindex="-1"></a><span class="co">#&gt; [52] S7_0.2.2</span></span></code></pre></div>
 </div>
 <div id="references" class="section level1 unnumbered">
 <h1 class="unnumbered">References</h1>

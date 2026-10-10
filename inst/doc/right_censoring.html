@@ -545,7 +545,7 @@ a terminal event happens at stage 2, i.e., that <span class="math inline">\(\eps
 </div>
 <div id="examples" class="section level2">
 <h2>Examples</h2>
-<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>sim_single_stage_right_cens <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">n =</span> <span class="fl">2e3</span>, <span class="at">zeta =</span> <span class="fu">c</span>(<span class="fl">0.7</span>, <span class="fl">0.2</span>), <span class="at">type =</span> <span class="st">&quot;right&quot;</span>){</span>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>sim_single_stage_right_cens <span class="ot">&lt;-</span> <span class="cf">function</span>(<span class="at">n =</span> <span class="dv">2</span>e3, <span class="at">zeta =</span> <span class="fu">c</span>(<span class="fl">0.7</span>, <span class="fl">0.2</span>), <span class="at">type =</span> <span class="st">&quot;right&quot;</span>){</span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>  d <span class="ot">&lt;-</span> <span class="fu">sim_single_stage</span>(<span class="at">n =</span> n)</span>
 <span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  pd <span class="ot">&lt;-</span> <span class="fu">policy_data</span>(<span class="at">data =</span> d,</span>
@@ -592,7 +592,7 @@ a terminal event happens at stage 2, i.e., that <span class="math inline">\(\eps
 <span id="cb2-45"><a href="#cb2-45" tabindex="-1"></a>  <span class="fu">return</span>(ld)</span>
 <span id="cb2-46"><a href="#cb2-46" tabindex="-1"></a>}</span></code></pre></div>
 <div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">1</span>)</span>
-<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>ld <span class="ot">&lt;-</span> <span class="fu">sim_single_stage_right_cens</span>(<span class="at">n =</span> <span class="fl">5e2</span>, <span class="at">type =</span> <span class="st">&quot;interval&quot;</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>ld <span class="ot">&lt;-</span> <span class="fu">sim_single_stage_right_cens</span>(<span class="at">n =</span> <span class="dv">5</span>e2, <span class="at">type =</span> <span class="st">&quot;interval&quot;</span>)</span>
 <span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>pd <span class="ot">&lt;-</span> <span class="fu">policy_data</span>(<span class="at">data =</span> ld, <span class="at">type =</span> <span class="st">&quot;long&quot;</span>, <span class="at">action =</span> <span class="st">&quot;A&quot;</span>, <span class="at">time =</span> <span class="st">&quot;time&quot;</span>, <span class="at">time2 =</span> <span class="st">&quot;time2&quot;</span>)</span></code></pre></div>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>pe <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">policy_data =</span> pd,</span>
@@ -602,18 +602,19 @@ a terminal event happens at stage 2, i.e., that <span class="math inline">\(\eps
 <span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>  <span class="at">c_models =</span> <span class="fu">list</span>(<span class="fu">c_cox</span>(<span class="at">formula =</span> <span class="sc">~</span> Z_1),</span>
 <span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>                  <span class="fu">c_cox</span>(<span class="at">formula =</span> <span class="sc">~</span> Z_2<span class="sc">*</span>A_1)),</span>
 <span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>  <span class="at">c_full_history =</span> <span class="cn">TRUE</span></span>
-<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>)</span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a>pe</span></code></pre></div>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>)</span></code></pre></div>
+<pre><code>## Loading required namespace: mets</code></pre>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>pe</span></code></pre></div>
 <pre><code>##         Estimate Std.Err  2.5%  97.5%   P-value
 ## E[U(d)]   -3.092   0.443 -3.96 -2.224 2.959e-12</code></pre>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>pe <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(</span>
-<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="at">policy_data =</span> pd,</span>
-<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="at">policy_learn =</span> <span class="fu">policy_learn</span>(<span class="at">type =</span> <span class="st">&quot;blip&quot;</span>, <span class="at">control =</span> <span class="fu">control_blip</span>()),</span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">m_model =</span> <span class="fu">q_glm</span>(<span class="sc">~</span>.),</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">m_full_history =</span> <span class="cn">FALSE</span>,</span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">c_models =</span> <span class="fu">c_cox</span>(<span class="at">formula =</span> <span class="sc">~</span> Z)</span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>)</span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>pe</span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>pe <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  <span class="at">policy_data =</span> pd,</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">policy_learn =</span> <span class="fu">policy_learn</span>(<span class="at">type =</span> <span class="st">&quot;blip&quot;</span>, <span class="at">control =</span> <span class="fu">control_blip</span>()),</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">m_model =</span> <span class="fu">q_glm</span>(<span class="sc">~</span>.),</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">m_full_history =</span> <span class="cn">FALSE</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">c_models =</span> <span class="fu">c_cox</span>(<span class="at">formula =</span> <span class="sc">~</span> Z)</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>)</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>pe</span></code></pre></div>
 <pre><code>##                        Estimate Std.Err     2.5%  97.5% P-value
 ## E[U(d)]: d=blip(eta=0)   0.3275  0.2114 -0.08694 0.7419  0.1214</code></pre>
 </div>
