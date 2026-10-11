@@ -1,6 +1,6 @@
 Package: polle
 Title: Policy Learning
-Version: 1.6.6
+Version: 1.6.7
 Authors@R: c(person(given = "Andreas",
                     family = "Nordland",
                     role = c("aut", "cre"),
@@ -18,15 +18,16 @@ Depends: R (>= 4.1)
 Imports: data.table (>= 1.14.5), lava (>= 1.9.2), future.apply,
         progressr, methods, policytree (>= 1.2.0), survival, targeted
         (>= 0.8), DynTxRegime
-Suggests: DTRlearn2 (>= 2.1), glmnet (>= 4.1-6), mets, mgcv, xgboost,
-        knitr, ranger, rmarkdown, testthat (>= 3.0), ggplot2
+Suggests: DTRlearn2 (>= 2.1), future, glmnet (>= 4.1-6), mets, mgcv,
+        xgboost, knitr, ranger, rmarkdown, SuperLearner (>= 2.0-42),
+        testthat (>= 3.0), ggplot2
 BugReports: https://github.com/AndreasNordland/polle/issues
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.1.0
 NeedsCompilation: no
-Packaged: 2026-10-10 12:04:57 UTC; oano
+Packaged: 2026-10-11 12:54:46 UTC; oano
 Author: Andreas Nordland [aut, cre],
   Klaus Holst [aut] (ORCID: <https://orcid.org/0000-0002-1364-6789>)
 Maintainer: Andreas Nordland <andreasnordland@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-10-10 12:40:02 UTC
+Date/Publication: 2026-10-11 14:00:02 UTC

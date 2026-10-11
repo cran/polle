@@ -557,8 +557,8 @@ from the Q-models using <code>predict()</code>.</p>
 <div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a>pe1 <span class="ot">&lt;-</span> <span class="fu">policy_eval</span>(pd,</span>
 <span id="cb27-2"><a href="#cb27-2" tabindex="-1"></a>            <span class="at">policy =</span> p1,</span>
 <span id="cb27-3"><a href="#cb27-3" tabindex="-1"></a>            <span class="at">g_models =</span> <span class="fu">list</span>(</span>
-<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a>              <span class="fu">g_rf</span>(<span class="at">formula =</span> <span class="sc">~</span> BB <span class="sc">+</span> L_1),</span>
-<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a>              <span class="fu">g_rf</span>(<span class="at">formula =</span> <span class="sc">~</span> BB <span class="sc">+</span> L_1 <span class="sc">+</span> C_2)</span>
+<span id="cb27-4"><a href="#cb27-4" tabindex="-1"></a>              <span class="fu">g_sl</span>(<span class="at">formula =</span> <span class="sc">~</span> BB <span class="sc">+</span> L_1, <span class="at">SL.library =</span> <span class="fu">c</span>(<span class="st">&quot;SL.glm&quot;</span>, <span class="st">&quot;SL.ranger&quot;</span>)),</span>
+<span id="cb27-5"><a href="#cb27-5" tabindex="-1"></a>              <span class="fu">g_sl</span>(<span class="at">formula =</span> <span class="sc">~</span> BB <span class="sc">+</span> L_1 <span class="sc">+</span> C_2, <span class="at">SL.library =</span> <span class="fu">c</span>(<span class="st">&quot;SL.glm&quot;</span>, <span class="st">&quot;SL.ranger&quot;</span>))</span>
 <span id="cb27-6"><a href="#cb27-6" tabindex="-1"></a>            ),</span>
 <span id="cb27-7"><a href="#cb27-7" tabindex="-1"></a>            <span class="at">g_full_history =</span> <span class="cn">TRUE</span>,</span>
 <span id="cb27-8"><a href="#cb27-8" tabindex="-1"></a>            <span class="at">q_models =</span> <span class="fu">list</span>(</span>
@@ -566,8 +566,8 @@ from the Q-models using <code>predict()</code>.</p>
 <span id="cb27-10"><a href="#cb27-10" tabindex="-1"></a>              <span class="fu">q_glm</span>(<span class="at">formula =</span> <span class="sc">~</span> A <span class="sc">*</span> (B <span class="sc">+</span> C_1 <span class="sc">+</span> C_2)) <span class="co"># including action interactions</span></span>
 <span id="cb27-11"><a href="#cb27-11" tabindex="-1"></a>            ),</span>
 <span id="cb27-12"><a href="#cb27-12" tabindex="-1"></a>            <span class="at">q_full_history =</span> <span class="cn">TRUE</span>)</span></code></pre></div>
-<pre><code>## Loading required namespace: ranger</code></pre>
-<p>Here we train a random-forest g-model for each stage using the full
+<pre><code>## Loading required package: nnls</code></pre>
+<p>Here we train a super learner g-model for each stage using the full
 available history and a generalized linear model for the Q-models. The
 <code>formula</code> argument is used to construct the model frame
 passed to the model for training (and prediction). The valid formula
@@ -623,10 +623,10 @@ score is calculated on the validation folds.</p>
 <p>The <code>policy_eval</code> object now consists of a list of
 <code>policy_eval</code> objects associated with each fold:</p>
 <div class="sourceCode" id="cb40"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb40-1"><a href="#cb40-1" tabindex="-1"></a>pe_cf<span class="sc">$</span>folds<span class="sc">$</span>fold_1 <span class="sc">|&gt;</span> <span class="fu">head</span>()</span></code></pre></div>
-<pre><code>## [1]  3  5  7  9 10 11</code></pre>
+<pre><code>## [1]  3  4  5  7  8 10</code></pre>
 <div class="sourceCode" id="cb42"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb42-1"><a href="#cb42-1" tabindex="-1"></a>pe_cf<span class="sc">$</span>cross_fits<span class="sc">$</span>fold_1</span></code></pre></div>
 <pre><code>##               Estimate Std.Err  2.5% 97.5%   P-value
-## E[U(d)]: d=ql    1.162 0.09446 0.977 1.347 8.724e-35</code></pre>
+## E[U(d)]: d=ql    1.261 0.09456 1.075 1.446 1.538e-40</code></pre>
 <p>In order to save memory, particularly when cross-fitting, it is
 possible not to save the nuisance models via the
 <code>save_g_functions</code> and <code>save_q_functions</code>
@@ -669,28 +669,29 @@ arguments.</p>
 ## [1] stats     graphics  grDevices utils     datasets  methods   base     
 ## 
 ## other attached packages:
-## [1] future_1.76.0       ggplot2_4.0.3       data.table_1.18.6.1
-## [4] polle_1.6.6        
+## [1] future_1.76.0       nnls_1.6            ggplot2_4.0.3      
+## [4] data.table_1.18.6.1 polle_1.6.7        
 ## 
 ## loaded via a namespace (and not attached):
 ##  [1] sass_0.4.10         generics_0.1.4      lattice_0.23-1     
 ##  [4] listenv_1.1.0       digest_0.6.39       magrittr_2.0.5     
 ##  [7] evaluate_1.0.5      grid_4.5.2          RColorBrewer_1.1-3 
-## [10] policytree_1.2.5    fastmap_1.2.0       jsonlite_2.0.0     
-## [13] Matrix_1.7-6        survival_3.8-12     scales_1.4.0       
-## [16] numDeriv_2016.8-1.1 codetools_0.2-20    jquerylib_0.1.4    
-## [19] lava_1.9.3.9000     cli_3.6.6           rlang_1.3.0        
-## [22] parallelly_1.48.0   future.apply_1.20.2 splines_4.5.2      
-## [25] withr_3.0.3         cachem_1.1.0        yaml_2.3.12        
-## [28] otel_0.2.0          tools_4.5.2         parallel_4.5.2     
-## [31] dplyr_1.2.1         ranger_0.18.0       globals_0.19.1     
-## [34] vctrs_0.7.3         R6_2.6.1            lifecycle_1.0.5    
-## [37] pkgconfig_2.0.3     progressr_1.0.0     bslib_0.12.0       
-## [40] pillar_1.11.1       gtable_0.3.6        glue_1.8.1         
-## [43] Rcpp_1.1.2          xfun_0.61           tibble_3.3.1       
-## [46] tidyselect_1.2.1    knitr_1.52          farver_2.1.2       
-## [49] htmltools_0.5.9     rmarkdown_2.32      labeling_0.4.3     
-## [52] compiler_4.5.2      S7_0.2.2</code></pre>
+## [10] iterators_1.0.14    policytree_1.2.5    fastmap_1.2.0      
+## [13] foreach_1.5.2       jsonlite_2.0.0      Matrix_1.7-6       
+## [16] survival_3.8-12     scales_1.4.0        numDeriv_2016.8-1.1
+## [19] codetools_0.2-20    jquerylib_0.1.4     lava_1.9.3.9000    
+## [22] cli_3.6.6           rlang_1.3.0         parallelly_1.48.0  
+## [25] future.apply_1.20.2 splines_4.5.2       withr_3.0.3        
+## [28] cachem_1.1.0        yaml_2.3.12         otel_0.2.0         
+## [31] tools_4.5.2         parallel_4.5.2      dplyr_1.2.1        
+## [34] ranger_0.18.0       globals_0.19.1      vctrs_0.7.3        
+## [37] R6_2.6.1            lifecycle_1.0.5     SuperLearner_2.0-42
+## [40] pkgconfig_2.0.3     progressr_1.0.0     bslib_0.12.0       
+## [43] pillar_1.11.1       gtable_0.3.6        glue_1.8.1         
+## [46] Rcpp_1.1.2          xfun_0.61           tibble_3.3.1       
+## [49] tidyselect_1.2.1    knitr_1.52          farver_2.1.2       
+## [52] htmltools_0.5.9     gam_1.22-7          rmarkdown_2.32     
+## [55] labeling_0.4.3      compiler_4.5.2      S7_0.2.2</code></pre>
 </div>
 <div id="references" class="section level1 unnumbered">
 <h1 class="unnumbered">References</h1>

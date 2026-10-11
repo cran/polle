@@ -51,12 +51,12 @@ predict(gf, new_policy_data = pd) |> head(6)
 ## ----get_qfun-----------------------------------------------------------------
 get_q_functions(pe1)
 
-## ----gq_models, cache = TRUE--------------------------------------------------
+## ----gq_models, cache = TRUE, eval = requireNamespace("SuperLearner", quietly = TRUE) && requireNamespace("ranger", quietly = TRUE)----
 pe1 <- policy_eval(pd,
             policy = p1,
             g_models = list(
-              g_rf(formula = ~ BB + L_1),
-              g_rf(formula = ~ BB + L_1 + C_2)
+              g_sl(formula = ~ BB + L_1, SL.library = c("SL.glm", "SL.ranger")),
+              g_sl(formula = ~ BB + L_1 + C_2, SL.library = c("SL.glm", "SL.ranger"))
             ),
             g_full_history = TRUE,
             q_models = list(
